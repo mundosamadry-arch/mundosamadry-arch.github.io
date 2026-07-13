@@ -9,6 +9,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- PWA: instalable y offline -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#9d4edd">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Samadry">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
     <!-- Stylesheet -->
     <link rel="stylesheet" href="index.css">
 </head>
@@ -40,6 +49,17 @@
                     </select>
                 </div>
 
+                <!-- Selector de Crossfade -->
+                <div class="control-group">
+                    <label for="crossfade-select">Crossfade:</label>
+                    <select id="crossfade-select" class="custom-select">
+                        <option value="0">Off</option>
+                        <option value="2">2s</option>
+                        <option value="3" selected>3s</option>
+                        <option value="5">5s</option>
+                    </select>
+                </div>
+
                 <!-- Master Volume -->
                 <div class="control-group master-volume-container">
                     <span class="volume-icon">🔊</span>
@@ -47,6 +67,11 @@
                     <span id="master-volume-text">80%</span>
                 </div>
 
+                <button id="install-app-btn" class="icon-btn" title="Instalar como app" style="display:none">📲</button>
+                <button id="download-offline-btn" class="icon-btn" title="Descargar canciones para usar sin conexión">⬇️</button>
+                <button id="stage-mode-btn" class="icon-btn" title="Modo Escenario (botones grandes)">🎬</button>
+                <a class="icon-btn header-link" href="catalogo.html" title="Gestionar canciones">🗂️</a>
+                <span id="network-status" class="network-status" title="Estado de conexión">Online</span>
                 <button id="settings-btn" class="icon-btn" title="Ajustes de Spotify">⚙️</button>
                 <button id="fullscreen-btn" class="icon-btn" title="Pantalla Completa">📺</button>
             </div>
@@ -55,35 +80,16 @@
         <!-- MAIN LAYOUT GRID -->
         <main class="main-grid">
             
-            <!-- COLUMNA IZQUIERDA: TEMPORIZADORES Y GUION -->
-            <section class="panel timer-panel" aria-label="Control de Tiempo del Show">
+            <!-- COLUMNA IZQUIERDA: ACCESOS RÁPIDOS Y GUION -->
+            <section class="panel timer-panel" aria-label="Accesos Rápidos">
                 <div class="panel-header">
-                    <h2>⏰ Control del Show</h2>
-                </div>
-                
-                <!-- Cronómetro General -->
-                <div class="main-chronometer">
-                    <div id="chrono-time">00:00:00</div>
-                    <div class="chrono-progress-bar">
-                        <div id="chrono-progress" class="chrono-progress-fill" style="width: 0%;"></div>
-                    </div>
-                    <div class="chrono-labels">
-                        <span id="chrono-status">Detenido</span>
-                        <span id="chrono-total-time">Total: 90:00</span>
-                    </div>
-                    <div class="chrono-controls">
-                        <button id="chrono-start-btn" class="btn btn-success">▶️ Iniciar Show</button>
-                        <button id="chrono-pause-btn" class="btn btn-warning" disabled>⏸️ Pausar</button>
-                        <button id="chrono-reset-btn" class="btn btn-danger">⏹️ Reiniciar</button>
-                    </div>
+                    <h2>🎵 Accesos Rápidos</h2>
                 </div>
 
-                <!-- Tramos del Show -->
-                <div class="show-segments-container">
-                    <h3>Tramos de Animación</h3>
-                    <div id="segments-list" class="segments-list">
-                        <!-- Generados dinámicamente por JS -->
-                    </div>
+                <!-- Botones de reproducción rápida -->
+                <div class="quick-play-buttons">
+                    <button id="btn-tarta" class="btn btn-quick-play">🎂 Tarta</button>
+                    <button id="btn-mundo-samadry" class="btn btn-quick-play">🌟 Mundo Samadry</button>
                 </div>
 
                 <!-- Notas y Guion en vivo -->
@@ -128,116 +134,49 @@
                         <button id="player-play-btn" class="player-btn play-main-btn" title="Reproducir">▶️</button>
                         <button id="player-next-btn" class="player-btn" title="Siguiente">⏭️</button>
                         <button id="player-stop-btn" class="player-btn" title="Detener">⏹️</button>
+                        <button id="player-duck-btn" class="player-btn toggle-btn" title="Bajar música para hablar">🔉</button>
                     </div>
                 </div>
 
                 <!-- Listas de Reproducción por Pestañas -->
                 <div class="playlist-tabs-container">
+                    <div class="song-search-bar">
+                        <input type="search" id="song-search" placeholder="🔍 Buscar canción en todas las listas...">
+                        <button id="fav-toggle-btn" title="Ver favoritas">⭐</button>
+                    </div>
                     <div class="playlist-tabs" role="tablist">
-                        <button id="tab-juegos" class="tab-btn active" role="tab" aria-selected="true" aria-controls="playlist-juegos">🏃 Juegos</button>
+                        <button id="tab-juegos" class="tab-btn active" role="tab" aria-selected="true" aria-controls="playlist-juegos">🏃 Juegos Generica</button>
                         <button id="tab-piratas" class="tab-btn" role="tab" aria-selected="false" aria-controls="playlist-piratas">🏴‍☠️ Piratas</button>
                         <button id="tab-exploradores" class="tab-btn" role="tab" aria-selected="false" aria-controls="playlist-exploradores">🧭 Exploradores</button>
                         <button id="tab-bluey" class="tab-btn" role="tab" aria-selected="false" aria-controls="playlist-bluey">💙 Bluey</button>
                         <button id="tab-kpop" class="tab-btn" role="tab" aria-selected="false" aria-controls="playlist-kpop">🎤 Kpop</button>
                         <button id="tab-spiderman" class="tab-btn" role="tab" aria-selected="false" aria-controls="playlist-spiderman">🕷️ Spiderman</button>
-                        <button id="tab-locales" class="tab-btn" role="tab" aria-selected="false" aria-controls="playlist-locales">📂 Mis MP3</button>
                     </div>
 
                     <div id="playlist-content" class="playlist-content">
                         <!-- La lista de canciones se inyecta dinámicamente con JS según la pestaña activa -->
                     </div>
                     
-                    <!-- Uploader para archivos locales (solo visible en pestaña Mis MP3) -->
-                    <div id="local-uploader-area" class="local-uploader-area hidden">
-                        <div class="upload-dropzone" id="drop-zone">
-                            <span class="upload-icon">📥</span>
-                            <p>Arrastra archivos de música (MP3/WAV) o haz clic para subir</p>
-                            <input type="file" id="local-file-input" multiple accept="audio/*" class="hidden-input">
-                        </div>
-                    </div>
                 </div>
             </section>
 
             <!-- COLUMNA DERECHA: BANCO DE SONIDOS (SOUNDBOARD) -->
             <section class="panel soundboard-panel" aria-label="Banco de Efectos de Sonido">
                 <div class="panel-header">
-                    <h2>🎉 Banco de Sonidos (Soundboard)</h2>
+                    <h2>🎉 Banco de Sonidos <span id="soundboard-theme-label" class="soundboard-theme-badge">🎉 Genérico</span></h2>
                     <span class="hotkey-tip">Atajos: Teclas [1-9]</span>
                 </div>
-                
-                <div class="soundboard-grid" id="soundboard-grid">
-                    <!-- Botón 1: Aplausos -->
-                    <button class="sound-pad pad-pink" data-sound="applause" data-key="1">
-                        <span class="pad-key">1</span>
-                        <span class="pad-emoji">👏</span>
-                        <span class="pad-name">Aplausos</span>
-                    </button>
-                    <!-- Botón 2: Redoble -->
-                    <button class="sound-pad pad-purple" data-sound="drumroll" data-key="2">
-                        <span class="pad-key">2</span>
-                        <span class="pad-emoji">🥁</span>
-                        <span class="pad-name">Redoble</span>
-                    </button>
-                    <!-- Botón 3: Magia -->
-                    <button class="sound-pad pad-cyan" data-sound="magic" data-key="3">
-                        <span class="pad-key">3</span>
-                        <span class="pad-emoji">🪄</span>
-                        <span class="pad-name">Mágico</span>
-                    </button>
-                    <!-- Botón 4: Bocina Cómica -->
-                    <button class="sound-pad pad-yellow" data-sound="horn" data-key="4">
-                        <span class="pad-key">4</span>
-                        <span class="pad-emoji">🎺</span>
-                        <span class="pad-name">Bocina</span>
-                    </button>
-                    <!-- Botón 5: Risas Niños -->
-                    <button class="sound-pad pad-green" data-sound="laughs" data-key="5">
-                        <span class="pad-key">5</span>
-                        <span class="pad-emoji">😆</span>
-                        <span class="pad-name">Risas</span>
-                    </button>
-                    <!-- Botón 6: Suspenso -->
-                    <button class="sound-pad pad-orange" data-sound="suspense" data-key="6">
-                        <span class="pad-key">6</span>
-                        <span class="pad-emoji">🕵️</span>
-                        <span class="pad-name">Suspenso</span>
-                    </button>
-                    <!-- Botón 7: Ding/Éxito -->
-                    <button class="sound-pad pad-blue" data-sound="ding" data-key="7">
-                        <span class="pad-key">7</span>
-                        <span class="pad-emoji">🔔</span>
-                        <span class="pad-name">Ding!</span>
-                    </button>
-                    <!-- Botón 8: Error/Fallo -->
-                    <button class="sound-pad pad-red" data-sound="error" data-key="8">
-                        <span class="pad-key">8</span>
-                        <span class="pad-emoji">💥</span>
-                        <span class="pad-name">Fallo</span>
-                    </button>
-                    <!-- Botón 9: Silbato de Árbitro -->
-                    <button class="sound-pad pad-violet" data-sound="whistle" data-key="9">
-                        <span class="pad-key">9</span>
-                        <span class="pad-emoji">🗣️</span>
-                        <span class="pad-name">Silbato</span>
-                    </button>
-                </div>
+
+                <!-- Los botones se generan dinámicamente con JS según la playlist activa -->
+                <div class="soundboard-grid" id="soundboard-grid"></div>
 
                 <!-- Custom Soundboard Binder -->
                 <div class="custom-sfx-binder">
                     <h3>Personalizar Banco de Sonidos</h3>
                     <p class="section-desc">¿Quieres cambiar algún sonido por un MP3 propio? Selecciónalo y carga tu archivo:</p>
                     <div class="binder-controls">
-                        <select id="sfx-select-to-bind" class="custom-select">
-                            <option value="applause">Reemplazar 1. Aplausos 👏</option>
-                            <option value="drumroll">Reemplazar 2. Redoble 🥁</option>
-                            <option value="magic">Reemplazar 3. Mágico 🪄</option>
-                            <option value="horn">Reemplazar 4. Bocina 🎺</option>
-                            <option value="laughs">Reemplazar 5. Risas 😆</option>
-                            <option value="suspense">Reemplazar 6. Suspenso 🕵️</option>
-                            <option value="ding">Reemplazar 7. Ding! 🔔</option>
-                            <option value="error">Reemplazar 8. Fallo 💥</option>
-                            <option value="whistle">Reemplazar 9. Silbato 🗣️</option>
-                        </select>
+                        <!-- El select se rellena dinámicamente con JS -->
+                        <select id="sfx-select-to-bind" class="custom-select"></select>
                         <label for="sfx-file-input" class="btn btn-secondary">📁 Elegir Audio</label>
                         <input type="file" id="sfx-file-input" accept="audio/*" class="hidden-input">
                         <button id="sfx-reset-all-btn" class="btn btn-outline-danger" title="Restaurar valores de fábrica">🔄 Reset</button>
@@ -289,12 +228,47 @@
         <div id="countdown-number" class="countdown-number">3</div>
     </div>
 
+    <!-- MODO ESCENARIO (botones gigantes para usar en directo) -->
+    <div id="stage-mode" class="hidden">
+        <div class="stage-top">
+            <div class="stage-track">
+                <div id="stage-track-title" class="stage-track-title">Selecciona una pista</div>
+                <div id="stage-track-sub" class="stage-track-sub">Listado temático</div>
+            </div>
+            <button id="stage-exit-btn" class="stage-exit" title="Salir del modo escenario">✕</button>
+        </div>
+
+        <div class="stage-progress"><div id="stage-progress-fill" class="stage-progress-fill"></div></div>
+
+        <div id="stage-voice-status" class="stage-voice-status" aria-live="polite">Micrófono apagado</div>
+
+        <div class="stage-section-label">Elige una lista</div>
+        <div id="stage-playlists" class="stage-playlists"></div>
+
+        <div class="stage-transport">
+            <button id="stage-prev" class="stage-btn" title="Anterior">⏮️</button>
+            <button id="stage-play" class="stage-btn play" title="Reproducir / Pausar">▶️</button>
+            <button id="stage-next" class="stage-btn" title="Siguiente">⏭️</button>
+            <button id="stage-duck" class="stage-btn duck" title="Bajar música para hablar">🔉</button>
+        </div>
+
+        <div class="stage-quick">
+            <button id="stage-voice" class="stage-btn stage-voice">🎙️ Escuchar</button>
+            <button id="stage-download" class="stage-btn">⬇️ Lista offline</button>
+            <button id="stage-tarta" class="stage-btn">🎂 Tarta</button>
+            <button id="stage-mundo" class="stage-btn">🌟 Mundo Samadry</button>
+        </div>
+
+        <div class="stage-section-label">Banco de sonidos</div>
+        <div id="stage-sounds" class="stage-sounds"></div>
+    </div>
+
     <!-- AUDIO ELEMENT NATIVO (PARA ARCHIVOS Y STREAMING) -->
     <audio id="native-audio-player"></audio>
 
     <!-- SPOTIFY WEB PLAYBACK SDK -->
     <script src="https://sdk.scdn.co/spotify-player.js"></script>
-    <!-- JS MAIN SCRIPT -->
+    <!-- JS MAIN SCRIPT (la actualización la gestiona el Service Worker) -->
     <script src="app.js"></script>
 </body>
 </html>

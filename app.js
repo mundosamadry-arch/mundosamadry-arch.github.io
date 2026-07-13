@@ -3,7 +3,7 @@
    ========================================================================== */
 
 // --- DATA: SONG PLAYLISTS ---
-const AUDIO_LIBRARY_BASE_URL = "https://animacionesinfantilesmusicales.com/samadry-audio/";
+const AUDIO_LIBRARY_BASE_URL = "https://animacionesinfantilesmusicales.com/player/samadry-audio/";
 const HOSTED_PLAYLIST_MANIFEST_URL = `${AUDIO_LIBRARY_BASE_URL}playlists.json`;
 
 const PLAYLISTS = {
@@ -12,28 +12,28 @@ const PLAYLISTS = {
             title: "I'm Still Standing",
             artist: "Mundo Samadry",
             duration: "--:--",
-            url: "https://animacionesinfantilesmusicales.com/samadry-audio/01-I_m_Still_Standing.mp3",
+            url: "https://animacionesinfantilesmusicales.com/player/samadry-audio/juegos-generica/01-I_m_Still_Standing.mp3",
             tag: "Juegos Generica"
         },
         {
             title: "Algo Asi Quiero Yo",
             artist: "Mundo Samadry",
             duration: "--:--",
-            url: "https://animacionesinfantilesmusicales.com/samadry-audio/02-Algo_Asi_Quiero_Yo.mp3",
+            url: "https://animacionesinfantilesmusicales.com/player/samadry-audio/juegos-generica/02-Algo_Asi_Quiero_Yo.mp3",
             tag: "Juegos Generica"
         },
         {
             title: "Superheroe",
             artist: "Mundo Samadry",
             duration: "--:--",
-            url: "https://animacionesinfantilesmusicales.com/samadry-audio/03-Superheroe.mp3",
+            url: "https://animacionesinfantilesmusicales.com/player/samadry-audio/juegos-generica/03-Superheroe.mp3",
             tag: "Juegos Generica"
         },
         {
             title: "Hijo de Hombre",
             artist: "Mundo Samadry",
             duration: "--:--",
-            url: "https://animacionesinfantilesmusicales.com/samadry-audio/04-Hijo_de_Hombre.mp3",
+            url: "https://animacionesinfantilesmusicales.com/player/samadry-audio/juegos-generica/04-Hijo_de_Hombre.mp3",
             tag: "Juegos Generica"
         }
     ],
@@ -42,13 +42,32 @@ const PLAYLISTS = {
     bluey: [],
     kpop: [],
     spiderman: [],
-    locales: [] // Se llena con archivos subidos por el usuario
+    locales: [], // Se llena con archivos subidos por el usuario
+    tarta: [
+        {
+            title: "Canción de Tarta",
+            artist: "Mundo Samadry",
+            duration: "--:--",
+            url: "https://animacionesinfantilesmusicales.com/player/samadry-audio/especiales/tarta.mp3",
+            tag: "Especial"
+        }
+    ],
+    mundo_samadry: [
+        {
+            title: "Mundo Samadry",
+            artist: "Mundo Samadry",
+            duration: "--:--",
+            url: "https://animacionesinfantilesmusicales.com/player/samadry-audio/especiales/mundo-samadry.mp3",
+            tag: "Especial"
+        }
+    ]
 };
 
 // --- WEB AUDIO API: SYNTHESIZER FOR SOUNDBOARD EFFECTS ---
 let audioCtx = null;
 let analyserNode = null;
 let customSfxBlobs = {}; // Guarda sonidos MP3 cargados por usuario en la soundboard (IndexedDB / en memoria)
+let hostedSfxUrls  = {}; // Sonidos subidos al hosting (sfx-manifest.json) → disponibles para todos
 
 // --- SPOTIFY PREMIUM SDK INTEGRATION ---
 let spotifyPlayer = null;
@@ -61,6 +80,18 @@ let spotifyPlayerConnecting = false;
 // --- VOICE ASSISTANT (MICROPHONE) ---
 let recognition = null;
 let voiceActive = false;
+let voiceDuckActive = false;
+let voiceDuckTimer = null;
+let recognitionRestartTimer = null;
+
+const STAGE_PLAYLISTS = [
+    ["juegos", "🏃", "Juegos"],
+    ["piratas", "🏴‍☠️", "Piratas"],
+    ["exploradores", "🧭", "Exploradores"],
+    ["bluey", "💙", "Bluey"],
+    ["kpop", "🎤", "Kpop"],
+    ["spiderman", "🕷️", "Spiderman"]
+];
 
 function initAudioContext() {
     if (!audioCtx) {
@@ -413,44 +444,665 @@ function playWhistleSynth() {
     osc.stop(now + duration);
 }
 
+// ============================================================
+// GENERIC NEW SOUNDS (positions 6-9)
+// ============================================================
+
+// 6. Fanfarria (🏆) - Trompa triunfal ascendente
+function playFanfarriaSynth() {
+    initAudioContext();
+    const now = audioCtx.currentTime;
+    const notes    = [392, 392, 392, 523.25, 659.25, 523.25, 783.99];
+    const durations= [0.12,0.12,0.12,0.15,   0.15,   0.15,   0.45  ];
+    let t = 0;
+    notes.forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, now + t);
+        gain.gain.linearRampToValueAtTime(0.25, now + t + 0.02);
+        gain.gain.setValueAtTime(0.25, now + t + durations[idx] - 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + t + durations[idx]);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now + t); osc.stop(now + t + durations[idx] + 0.02);
+        t += durations[idx];
+    });
+}
+
+// 7. Power-Up (⭐) - Arpegio ascendente de videojuego 8-bit
+function playPowerUpSynth() {
+    initAudioContext();
+    const now = audioCtx.currentTime;
+    const notes = [262, 330, 392, 523, 659, 784, 1047, 1319];
+    notes.forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.065);
+        osc.frequency.linearRampToValueAtTime(freq * 1.05, now + idx * 0.065 + 0.06);
+        gain.gain.setValueAtTime(0.18, now + idx * 0.065);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.065 + 0.12);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.065); osc.stop(now + idx * 0.065 + 0.14);
+    });
+}
+
+// 8. Explosión (💥) - Boom grave + ráfaga de ruido
+function playExplosionSynth() {
+    initAudioContext();
+    const now = audioCtx.currentTime;
+    const duration = 1.2;
+    const bufferSize = audioCtx.sampleRate * duration;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const noiseFilter = audioCtx.createBiquadFilter();
+    noiseFilter.type = "lowpass"; noiseFilter.frequency.setValueAtTime(800, now);
+    noiseFilter.frequency.exponentialRampToValueAtTime(80, now + duration);
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.7, now); noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+    noise.start(now);
+    const kick = audioCtx.createOscillator();
+    const kickGain = audioCtx.createGain();
+    kick.type = "sine"; kick.frequency.setValueAtTime(120, now);
+    kick.frequency.exponentialRampToValueAtTime(20, now + 0.5);
+    kickGain.gain.setValueAtTime(0.9, now); kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    kick.connect(kickGain); kickGain.connect(audioCtx.destination);
+    kick.start(now); kick.stop(now + 0.7);
+}
+
+// 9. Round (🔔) - Campana de combate
+function playRoundSynth() {
+    initAudioContext();
+    const now = audioCtx.currentTime;
+    [660, 1320, 1980].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine"; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.35 / (idx + 1), now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 2.5 - idx * 0.3);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 2.6);
+    });
+}
+
+// ============================================================
+// THEMATIC SOUNDS — PIRATAS 🏴‍☠️
+// ============================================================
+function playCanonSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur = 1.0;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+    const d = buf.getChannelData(0); for (let i = 0; i < buf.length; i++) d[i] = Math.random()*2-1;
+    const noise = audioCtx.createBufferSource(); noise.buffer = buf;
+    const f = audioCtx.createBiquadFilter(); f.type="lowpass"; f.frequency.value=600;
+    const g = audioCtx.createGain(); g.gain.setValueAtTime(0.8,now); g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+    const kick = audioCtx.createOscillator(); const kg = audioCtx.createGain();
+    kick.type="sine"; kick.frequency.setValueAtTime(80,now); kick.frequency.exponentialRampToValueAtTime(10,now+0.4);
+    kg.gain.setValueAtTime(1.0,now); kg.gain.exponentialRampToValueAtTime(0.001,now+0.5);
+    kick.connect(kg); kg.connect(audioCtx.destination); kick.start(now); kick.stop(now+0.6);
+}
+function playParrotSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [0, 0.22, 0.44].forEach((t) => {
+        const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        osc.type="sawtooth"; osc.frequency.setValueAtTime(1200+Math.random()*400, now+t);
+        osc.frequency.exponentialRampToValueAtTime(800, now+t+0.16);
+        g.gain.setValueAtTime(0.22, now+t); g.gain.exponentialRampToValueAtTime(0.001, now+t+0.19);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+t); osc.stop(now+t+0.22);
+    });
+}
+function playSwordSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
+    osc.type="sawtooth"; osc.frequency.setValueAtTime(3000,now); osc.frequency.exponentialRampToValueAtTime(600,now+0.3);
+    g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.35);
+    osc.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.4);
+}
+function playAbordajeSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [196,220,247,294].forEach((freq,idx) => {
+        const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        osc.type="sawtooth"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0,now+idx*0.1); g.gain.linearRampToValueAtTime(0.3,now+idx*0.1+0.05);
+        g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.1+0.16);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.1); osc.stop(now+idx*0.1+0.2);
+    });
+}
+function playWavesSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur=3.0;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*dur, audioCtx.sampleRate);
+    const d = buf.getChannelData(0); for (let i=0;i<buf.length;i++) d[i]=Math.random()*2-1;
+    const noise = audioCtx.createBufferSource(); noise.buffer=buf;
+    const f = audioCtx.createBiquadFilter(); f.type="bandpass"; f.frequency.value=600; f.Q.value=0.5;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.04,now); g.gain.linearRampToValueAtTime(0.12,now+0.8);
+    g.gain.linearRampToValueAtTime(0.03,now+1.6); g.gain.linearRampToValueAtTime(0.12,now+2.4);
+    g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+}
+function playTreasureSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [1047,1319,1568,2093,1568,2093,1319].forEach((freq,idx) => {
+        const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        osc.type="triangle"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0.15,now+idx*0.07); g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.07+0.22);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.07); osc.stop(now+idx*0.07+0.26);
+    });
+}
+function playAlarmPirataSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    for (let i=0;i<6;i++) {
+        const osc = audioCtx.createOscillator(); const g = audioCtx.createGain();
+        osc.type="square"; osc.frequency.value = i%2===0 ? 880 : 660;
+        g.gain.setValueAtTime(0.22,now+i*0.12); g.gain.exponentialRampToValueAtTime(0.001,now+i*0.12+0.1);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+i*0.12); osc.stop(now+i*0.12+0.13);
+    }
+}
+function playVictoriaPiratasSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const notes=[523,659,784,1047]; const times=[0,0.15,0.3,0.5]; const durs=[0.12,0.12,0.12,0.7];
+    notes.forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="square"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0.3,now+times[idx]); g.gain.exponentialRampToValueAtTime(0.001,now+times[idx]+durs[idx]);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+times[idx]); osc.stop(now+times[idx]+durs[idx]+0.05);
+    });
+}
+function playSharkSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    let interval=0.5, t=0;
+    for (let beat=0;beat<9;beat++) {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sine"; osc.frequency.value = beat%2===0 ? 98 : 110;
+        g.gain.setValueAtTime(0,now+t); g.gain.linearRampToValueAtTime(0.3,now+t+0.05);
+        g.gain.exponentialRampToValueAtTime(0.001,now+t+interval-0.03);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+t); osc.stop(now+t+interval);
+        t += interval; interval = Math.max(0.09, interval*0.86);
+    }
+}
+
+// ============================================================
+// THEMATIC SOUNDS — EXPLORADORES 🧭
+// ============================================================
+function playJungleSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [0, 0.15, 0.32, 0.5, 0.65, 0.82].forEach((t) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sine"; const base=2000+Math.random()*1500;
+        osc.frequency.setValueAtTime(base,now+t); osc.frequency.exponentialRampToValueAtTime(base*1.35,now+t+0.07);
+        g.gain.setValueAtTime(0.12,now+t); g.gain.exponentialRampToValueAtTime(0.001,now+t+0.09);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+t); osc.stop(now+t+0.11);
+    });
+}
+function playAdventureHornSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [261,329,392,523].forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sawtooth"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0,now+idx*0.2); g.gain.linearRampToValueAtTime(0.25,now+idx*0.2+0.06);
+        g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.2+0.22);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.2); osc.stop(now+idx*0.2+0.26);
+    });
+}
+function playDiscoverySynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [523,659,784,1047,1319].forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="triangle";
+        osc.frequency.setValueAtTime(freq*0.8,now+idx*0.09); osc.frequency.exponentialRampToValueAtTime(freq*1.2,now+idx*0.09+0.05);
+        g.gain.setValueAtTime(0.15,now+idx*0.09); g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.09+0.3);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.09); osc.stop(now+idx*0.09+0.35);
+    });
+}
+function playCompassSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    for (let i=0;i<8;i++) {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="square"; osc.frequency.value=i%2===0?1200:900;
+        g.gain.setValueAtTime(0.14,now+i*0.1); g.gain.exponentialRampToValueAtTime(0.001,now+i*0.1+0.04);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+i*0.1); osc.stop(now+i*0.1+0.05);
+    }
+}
+function playBeastRoarSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur=1.5;
+    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<buf.length;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const f=audioCtx.createBiquadFilter(); f.type="bandpass"; f.frequency.setValueAtTime(300,now); f.Q.value=3;
+    f.frequency.linearRampToValueAtTime(80,now+dur*0.7);
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.55,now+0.15);
+    g.gain.linearRampToValueAtTime(0.4,now+dur*0.6); g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+}
+function playCaveDripSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [0, 0.8, 1.6].forEach((t) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sine"; osc.frequency.setValueAtTime(1200,now+t); osc.frequency.exponentialRampToValueAtTime(400,now+t+0.25);
+        g.gain.setValueAtTime(0.2,now+t); g.gain.exponentialRampToValueAtTime(0.001,now+t+0.32);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+t); osc.stop(now+t+0.36);
+    });
+}
+function playVictoriaExplorSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const n=[392,523,659,784,784]; const t=[0,0.12,0.24,0.36,0.5]; const dur=[0.1,0.1,0.1,0.1,0.55];
+    n.forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sawtooth"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0.28,now+t[idx]); g.gain.exponentialRampToValueAtTime(0.001,now+t[idx]+dur[idx]);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+t[idx]); osc.stop(now+t[idx]+dur[idx]+0.05);
+    });
+}
+function playAlertExplorSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    for (let i=0;i<4;i++) {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="square"; osc.frequency.value=1047;
+        g.gain.setValueAtTime(0.22,now+i*0.18); g.gain.exponentialRampToValueAtTime(0.001,now+i*0.18+0.15);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+i*0.18); osc.stop(now+i*0.18+0.17);
+    }
+}
+function playMarchSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [1,0,1,0,1,1,0,1].forEach((hit,idx) => {
+        if (!hit) return;
+        const sz=Math.floor(audioCtx.sampleRate*0.08);
+        const buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+        const d=buf.getChannelData(0); for (let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+        const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+        const f=audioCtx.createBiquadFilter(); f.type="bandpass"; f.frequency.value=800;
+        const g=audioCtx.createGain(); g.gain.setValueAtTime(0.3,now+idx*0.12); g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.12+0.07);
+        noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now+idx*0.12);
+    });
+}
+
+// ============================================================
+// THEMATIC SOUNDS — BLUEY 💙
+// ============================================================
+function playWoofSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const sz=Math.floor(audioCtx.sampleRate*0.3);
+    const buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const f=audioCtx.createBiquadFilter(); f.type="bandpass"; f.frequency.setValueAtTime(500,now); f.Q.value=4;
+    f.frequency.exponentialRampToValueAtTime(200,now+0.25);
+    const g=audioCtx.createGain(); g.gain.setValueAtTime(0.55,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.32);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+}
+function playHappyBlueSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [523,659,784,659,784,1047].forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="triangle"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0.15,now+idx*0.1); g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.1+0.22);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.1); osc.stop(now+idx*0.1+0.25);
+    });
+}
+function playSurpriseBlueSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    osc.type="sine"; osc.frequency.setValueAtTime(300,now); osc.frequency.exponentialRampToValueAtTime(1800,now+0.25);
+    g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.35);
+    osc.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.4);
+}
+function playDanceBlueSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [0,0.15,0.3,0.6,0.75,0.9].forEach((t,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sine"; osc.frequency.value=idx%2===0?200:280;
+        g.gain.setValueAtTime(0.4,now+t); g.gain.exponentialRampToValueAtTime(0.001,now+t+0.12);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+t); osc.stop(now+t+0.14);
+    });
+}
+function playCricketSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    for (let i=0;i<12;i++) {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sine"; osc.frequency.value=4000+i%3*200;
+        g.gain.setValueAtTime(0.08,now+i*0.07); g.gain.exponentialRampToValueAtTime(0.001,now+i*0.07+0.05);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+i*0.07); osc.stop(now+i*0.07+0.06);
+    }
+}
+function playFluteBlueSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [659,784,880,784,659,784].forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sine"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0,now+idx*0.15); g.gain.linearRampToValueAtTime(0.12,now+idx*0.15+0.04);
+        g.gain.setValueAtTime(0.12,now+idx*0.15+0.11); g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.15+0.15);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.15); osc.stop(now+idx*0.15+0.18);
+    });
+}
+function playGameBlueSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [523,784,523,659,523,880].forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="square"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0.12,now+idx*0.08); g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.08+0.07);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.08); osc.stop(now+idx*0.08+0.09);
+    });
+}
+function playFriendSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [523,659,784].forEach((freq) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="triangle"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.1,now+0.05);
+        g.gain.setValueAtTime(0.1,now+0.6); g.gain.exponentialRampToValueAtTime(0.001,now+1.2);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+1.3);
+    });
+}
+function playFamilySynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [392,523,659,523,392].forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="triangle"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0,now+idx*0.18); g.gain.linearRampToValueAtTime(0.13,now+idx*0.18+0.05);
+        g.gain.setValueAtTime(0.13,now+idx*0.18+0.14); g.gain.exponentialRampToValueAtTime(0.001,now+idx*0.18+0.2);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+idx*0.18); osc.stop(now+idx*0.18+0.25);
+    });
+}
+
+// ============================================================
+// THEMATIC SOUNDS — KPOP 🎤
+// ============================================================
+function playBeatDropSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const kg=audioCtx.createGain();
+    osc.type="sine"; osc.frequency.setValueAtTime(200,now); osc.frequency.exponentialRampToValueAtTime(40,now+0.35);
+    kg.gain.setValueAtTime(1.0,now); kg.gain.exponentialRampToValueAtTime(0.001,now+0.4);
+    osc.connect(kg); kg.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.45);
+    const sz=Math.floor(audioCtx.sampleRate*0.1);
+    const buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const ng=audioCtx.createGain(); ng.gain.setValueAtTime(0.4,now+0.35); ng.gain.exponentialRampToValueAtTime(0.001,now+0.45);
+    noise.connect(ng); ng.connect(audioCtx.destination); noise.start(now+0.35);
+}
+function playKCheerSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur=1.5;
+    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<buf.length;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const f=audioCtx.createBiquadFilter(); f.type="bandpass"; f.frequency.value=2000; f.Q.value=0.5;
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.22,now+0.3);
+    g.gain.setValueAtTime(0.22,now+dur-0.3); g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+}
+function playKCymbalSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur=1.2;
+    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<buf.length;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const f=audioCtx.createBiquadFilter(); f.type="highpass"; f.frequency.value=4000;
+    const g=audioCtx.createGain(); g.gain.setValueAtTime(0.5,now); g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+}
+function playKSynthLeadSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const f=audioCtx.createBiquadFilter(); const g=audioCtx.createGain();
+    osc.type="sawtooth";
+    osc.frequency.setValueAtTime(440,now); osc.frequency.setValueAtTime(880,now+0.2); osc.frequency.setValueAtTime(660,now+0.35);
+    f.type="lowpass"; f.frequency.setValueAtTime(3000,now); f.frequency.exponentialRampToValueAtTime(800,now+0.5);
+    g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.6);
+    osc.connect(f); f.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.65);
+}
+function playKDropSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const f=audioCtx.createBiquadFilter(); const g=audioCtx.createGain();
+    osc.type="sawtooth"; osc.frequency.value=80;
+    f.type="lowpass";
+    f.frequency.setValueAtTime(2000,now); f.frequency.exponentialRampToValueAtTime(200,now+0.15);
+    f.frequency.exponentialRampToValueAtTime(1500,now+0.3); f.frequency.exponentialRampToValueAtTime(200,now+0.45);
+    g.gain.setValueAtTime(0.6,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.7);
+    osc.connect(f); f.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.75);
+}
+function playAirHornKSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const o1=audioCtx.createOscillator(); const o2=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    o1.type="sawtooth"; o1.frequency.value=174; o2.type="sawtooth"; o2.frequency.value=178;
+    g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.5,now+0.05);
+    g.gain.setValueAtTime(0.5,now+0.6); g.gain.exponentialRampToValueAtTime(0.001,now+0.8);
+    o1.connect(g); o2.connect(g); g.connect(audioCtx.destination);
+    o1.start(now); o2.start(now); o1.stop(now+0.85); o2.stop(now+0.85);
+}
+function playWoahKSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    osc.type="sine"; osc.frequency.setValueAtTime(200,now);
+    osc.frequency.exponentialRampToValueAtTime(1000,now+0.3); osc.frequency.setValueAtTime(1000,now+0.32);
+    osc.frequency.exponentialRampToValueAtTime(600,now+0.6);
+    g.gain.setValueAtTime(0.35,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.7);
+    osc.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.75);
+}
+function playKCrowdSynth() {
+    // Variante de cheer con ataque más rápido
+    initAudioContext(); const now = audioCtx.currentTime; const dur=1.8;
+    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<buf.length;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const f=audioCtx.createBiquadFilter(); f.type="bandpass"; f.frequency.value=1800; f.Q.value=0.4;
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.28,now+0.1);
+    g.gain.setValueAtTime(0.28,now+dur-0.3); g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+}
+function playFanchantSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [0,0.15,0.3,0.6,0.75,0.9].forEach((t) => {
+        const sz=Math.floor(audioCtx.sampleRate*0.05);
+        const buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+        const d=buf.getChannelData(0); for (let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+        const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+        const f=audioCtx.createBiquadFilter(); f.type="bandpass"; f.frequency.value=1200; f.Q.value=2;
+        const g=audioCtx.createGain(); g.gain.setValueAtTime(0.32,now+t); g.gain.exponentialRampToValueAtTime(0.001,now+t+0.04);
+        noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now+t);
+    });
+}
+
+// ============================================================
+// THEMATIC SOUNDS — SPIDERMAN 🕷️
+// ============================================================
+function playWebShootSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    osc.type="sine"; osc.frequency.setValueAtTime(4000,now); osc.frequency.exponentialRampToValueAtTime(800,now+0.15);
+    g.gain.setValueAtTime(0.4,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.2);
+    osc.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.22);
+    const sz=Math.floor(audioCtx.sampleRate*0.05);
+    const buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const ng=audioCtx.createGain(); ng.gain.setValueAtTime(0.3,now); ng.gain.exponentialRampToValueAtTime(0.001,now+0.04);
+    noise.connect(ng); ng.connect(audioCtx.destination); noise.start(now);
+}
+function playSwingSpiderSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur=0.5;
+    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<buf.length;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const f=audioCtx.createBiquadFilter(); f.type="bandpass"; f.Q.value=2;
+    f.frequency.setValueAtTime(200,now); f.frequency.exponentialRampToValueAtTime(4000,now+0.25); f.frequency.exponentialRampToValueAtTime(400,now+0.5);
+    const g=audioCtx.createGain();
+    g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.45,now+0.15); g.gain.exponentialRampToValueAtTime(0.001,now+0.5);
+    noise.connect(f); f.connect(g); g.connect(audioCtx.destination); noise.start(now);
+}
+function playThwipSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    osc.type="square"; osc.frequency.setValueAtTime(5000,now); osc.frequency.exponentialRampToValueAtTime(200,now+0.08);
+    g.gain.setValueAtTime(0.3,now); g.gain.exponentialRampToValueAtTime(0.001,now+0.1);
+    osc.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+0.12);
+}
+function playVillainSpiderSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    [110,146.83,196].forEach((freq) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sawtooth"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.15,now+0.1);
+        g.gain.setValueAtTime(0.15,now+0.8); g.gain.exponentialRampToValueAtTime(0.001,now+1.2);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+1.3);
+    });
+}
+function playSpiderAlertSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    for (let i=0;i<5;i++) {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="sine"; osc.frequency.setValueAtTime(2000+i*100,now+i*0.1);
+        osc.frequency.exponentialRampToValueAtTime(2500+i*100,now+i*0.1+0.07);
+        g.gain.setValueAtTime(0.25,now+i*0.1); g.gain.exponentialRampToValueAtTime(0.001,now+i*0.1+0.09);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+i*0.1); osc.stop(now+i*0.1+0.1);
+    }
+}
+function playBoomImpactSynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const kick=audioCtx.createOscillator(); const kg=audioCtx.createGain();
+    kick.type="sine"; kick.frequency.setValueAtTime(150,now); kick.frequency.exponentialRampToValueAtTime(30,now+0.2);
+    kg.gain.setValueAtTime(0.85,now); kg.gain.exponentialRampToValueAtTime(0.001,now+0.25);
+    kick.connect(kg); kg.connect(audioCtx.destination); kick.start(now); kick.stop(now+0.3);
+    const sz=Math.floor(audioCtx.sampleRate*0.15);
+    const buf=audioCtx.createBuffer(1,sz,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<sz;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const ng=audioCtx.createGain(); ng.gain.setValueAtTime(0.6,now); ng.gain.exponentialRampToValueAtTime(0.001,now+0.15);
+    noise.connect(ng); ng.connect(audioCtx.destination); noise.start(now);
+}
+function playSpiderPowerSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur=1.2;
+    const osc=audioCtx.createOscillator(); const f=audioCtx.createBiquadFilter(); const g=audioCtx.createGain();
+    osc.type="sawtooth"; osc.frequency.setValueAtTime(80,now); osc.frequency.exponentialRampToValueAtTime(1600,now+dur*0.8);
+    osc.frequency.setValueAtTime(880,now+dur*0.8);
+    f.type="lowpass"; f.frequency.setValueAtTime(200,now); f.frequency.exponentialRampToValueAtTime(3000,now+dur);
+    g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(0.4,now+dur*0.7); g.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    osc.connect(f); f.connect(g); g.connect(audioCtx.destination); osc.start(now); osc.stop(now+dur+0.05);
+}
+function playSpiderVictorySynth() {
+    initAudioContext(); const now = audioCtx.currentTime;
+    const n=[523,659,784,1047,880,784,1047]; const t=[0,0.1,0.2,0.3,0.5,0.6,0.7]; const dur=[0.08,0.08,0.08,0.18,0.08,0.08,0.5];
+    n.forEach((freq,idx) => {
+        const osc=audioCtx.createOscillator(); const g=audioCtx.createGain();
+        osc.type="square"; osc.frequency.value=freq;
+        g.gain.setValueAtTime(0.22,now+t[idx]); g.gain.exponentialRampToValueAtTime(0.001,now+t[idx]+dur[idx]);
+        osc.connect(g); g.connect(audioCtx.destination); osc.start(now+t[idx]); osc.stop(now+t[idx]+dur[idx]+0.05);
+    });
+}
+function playCityNightSynth() {
+    initAudioContext(); const now = audioCtx.currentTime; const dur=3.0;
+    const osc1=audioCtx.createOscillator(); const g1=audioCtx.createGain();
+    osc1.type="sine";
+    osc1.frequency.setValueAtTime(880,now); osc1.frequency.linearRampToValueAtTime(660,now+1.0);
+    osc1.frequency.linearRampToValueAtTime(880,now+2.0); osc1.frequency.linearRampToValueAtTime(660,now+3.0);
+    g1.gain.setValueAtTime(0,now); g1.gain.linearRampToValueAtTime(0.08,now+0.3);
+    g1.gain.setValueAtTime(0.08,now+dur-0.5); g1.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    osc1.connect(g1); g1.connect(audioCtx.destination); osc1.start(now); osc1.stop(now+dur);
+    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*dur,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for (let i=0;i<buf.length;i++) d[i]=Math.random()*2-1;
+    const noise=audioCtx.createBufferSource(); noise.buffer=buf;
+    const nf=audioCtx.createBiquadFilter(); nf.type="lowpass"; nf.frequency.value=400;
+    const ng=audioCtx.createGain(); ng.gain.setValueAtTime(0.03,now); ng.gain.setValueAtTime(0.03,now+dur-0.4); ng.gain.exponentialRampToValueAtTime(0.001,now+dur);
+    noise.connect(nf); nf.connect(ng); ng.connect(audioCtx.destination); noise.start(now);
+}
+
 // --- CONTROLLER FOR SOUNDBOARD BUTTON TRIGGERS ---
+
+// Mapa completo: soundId → función de síntesis
+const SYNTH_FUNCTIONS = {
+    // Genéricos originales (también usados por comandos de voz y cronómetro)
+    applause:  playApplauseSynth,
+    drumroll:  playDrumrollSynth,
+    magic:     playMagicSynth,
+    horn:      playHornSynth,
+    laughs:    playLaughsSynth,
+    suspense:  playSuspenseSynth,
+    ding:      playDingSynth,
+    error:     playErrorSynth,
+    whistle:   playWhistleSynth,
+    // Genéricos nuevos (posiciones 6-9 en soundboard)
+    fanfare:   playFanfarriaSynth,
+    powerup:   playPowerUpSynth,
+    explosion: playExplosionSynth,
+    round:     playRoundSynth,
+    // Piratas
+    canon:     playCanonSynth,
+    parrot:    playParrotSynth,
+    sword:     playSwordSynth,
+    abordaje:  playAbordajeSynth,
+    waves:     playWavesSynth,
+    treasure:  playTreasureSynth,
+    alarmP:    playAlarmPirataSynth,
+    victoriaP: playVictoriaPiratasSynth,
+    shark:     playSharkSynth,
+    // Exploradores
+    jungle:    playJungleSynth,
+    advHorn:   playAdventureHornSynth,
+    discovery: playDiscoverySynth,
+    compass:   playCompassSynth,
+    beast:     playBeastRoarSynth,
+    cave:      playCaveDripSynth,
+    victoriaE: playVictoriaExplorSynth,
+    alertE:    playAlertExplorSynth,
+    march:     playMarchSynth,
+    // Bluey
+    woof:      playWoofSynth,
+    happyB:    playHappyBlueSynth,
+    surpriseB: playSurpriseBlueSynth,
+    danceB:    playDanceBlueSynth,
+    cricket:   playCricketSynth,
+    fluteB:    playFluteBlueSynth,
+    gameB:     playGameBlueSynth,
+    friend:    playFriendSynth,
+    family:    playFamilySynth,
+    // Kpop
+    beatDrop:  playBeatDropSynth,
+    cheerK:    playKCheerSynth,
+    cymbalK:   playKCymbalSynth,
+    synthK:    playKSynthLeadSynth,
+    dropK:     playKDropSynth,
+    airHornK:  playAirHornKSynth,
+    woahK:     playWoahKSynth,
+    crowdK:    playKCrowdSynth,
+    fanchant:  playFanchantSynth,
+    // Spiderman
+    webshoot:  playWebShootSynth,
+    swingS:    playSwingSpiderSynth,
+    thwip:     playThwipSynth,
+    villainS:  playVillainSpiderSynth,
+    alertS:    playSpiderAlertSynth,
+    boomS:     playBoomImpactSynth,
+    powerS:    playSpiderPowerSynth,
+    victoryS:  playSpiderVictorySynth,
+    cityS:     playCityNightSynth,
+};
+
 function triggerSFX(soundId) {
-    // Si el usuario cargó un archivo personalizado para este sonido, reproducirlo
+    // 1. Archivo local del animador (solo en este navegador)
     if (customSfxBlobs[soundId]) {
         playCustomSFXFile(customSfxBlobs[soundId]);
         return;
     }
-    
-    // De lo contrario, disparar el sintetizador offline
-    switch (soundId) {
-        case "applause":
-            playApplauseSynth();
-            break;
-        case "drumroll":
-            playDrumrollSynth();
-            break;
-        case "magic":
-            playMagicSynth();
-            break;
-        case "horn":
-            playHornSynth();
-            break;
-        case "laughs":
-            playLaughsSynth();
-            break;
-        case "suspense":
-            playSuspenseSynth();
-            break;
-        case "ding":
-            playDingSynth();
-            break;
-        case "error":
-            playErrorSynth();
-            break;
-        case "whistle":
-            playWhistleSynth();
-            break;
+    // 2. Sonido subido al hosting (disponible para todos los animadores)
+    if (hostedSfxUrls[soundId]) {
+        playHostedSFXUrl(hostedSfxUrls[soundId]);
+        return;
     }
+    // 3. Sintetizador offline (fallback siempre disponible)
+    const fn = SYNTH_FUNCTIONS[soundId];
+    if (fn) fn();
+}
+
+function playHostedSFXUrl(url) {
+    initAudioContext();
+    const audio = new Audio(url);
+    audio.volume = parseFloat(document.getElementById("master-volume-slider").value);
+    audio.play().catch(e => console.warn("Error reproduciendo SFX hosted:", e));
 }
 
 function playCustomSFXFile(fileBlob) {
@@ -474,6 +1126,229 @@ function playCustomSFXFile(fileBlob) {
 }
 
 
+// ============================================================
+// SOUNDBOARD DATA & DYNAMIC RENDERER
+// ============================================================
+
+const GENERIC_SOUNDS = [
+    { id: "applause",  emoji: "👏", name: "Aplausos",  color: "pad-pink"   },
+    { id: "drumroll",  emoji: "🥁", name: "Redoble",   color: "pad-purple" },
+    { id: "magic",     emoji: "🪄", name: "Mágico",    color: "pad-cyan"   },
+    { id: "horn",      emoji: "🎺", name: "Bocina",    color: "pad-yellow" },
+    { id: "laughs",    emoji: "😆", name: "Risas",     color: "pad-green"  },
+    { id: "fanfare",   emoji: "🏆", name: "Fanfarria", color: "pad-orange" },
+    { id: "powerup",   emoji: "⭐", name: "Power-up",  color: "pad-blue"   },
+    { id: "explosion", emoji: "💥", name: "Explosión", color: "pad-red"    },
+    { id: "round",     emoji: "🔔", name: "Round",     color: "pad-violet" },
+];
+
+const THEMATIC_SOUNDS = {
+    piratas: [
+        { id: "canon",     emoji: "💣",   name: "Cañonazo", color: "pad-purple" },
+        { id: "parrot",    emoji: "🦜",   name: "Loro",     color: "pad-green"  },
+        { id: "sword",     emoji: "⚔️",  name: "Sable",    color: "pad-cyan"   },
+        { id: "abordaje",  emoji: "🏴‍☠️", name: "Abordaje", color: "pad-red"    },
+        { id: "waves",     emoji: "🌊",   name: "Olas",     color: "pad-blue"   },
+        { id: "treasure",  emoji: "💰",   name: "Tesoro",   color: "pad-yellow" },
+        { id: "alarmP",    emoji: "🚨",   name: "Alarma",   color: "pad-orange" },
+        { id: "victoriaP", emoji: "🏆",   name: "Victoria", color: "pad-pink"   },
+        { id: "shark",     emoji: "🦈",   name: "Tiburón",  color: "pad-violet" },
+    ],
+    exploradores: [
+        { id: "jungle",    emoji: "🌿",   name: "Selva",      color: "pad-green"  },
+        { id: "advHorn",   emoji: "📯",   name: "Aventura",   color: "pad-yellow" },
+        { id: "discovery", emoji: "✨",   name: "Descubrím.", color: "pad-cyan"   },
+        { id: "compass",   emoji: "🧭",   name: "Brújula",    color: "pad-blue"   },
+        { id: "beast",     emoji: "🦁",   name: "Bestia",     color: "pad-orange" },
+        { id: "cave",      emoji: "🕳️",  name: "Cueva",     color: "pad-purple" },
+        { id: "victoriaE", emoji: "🏆",   name: "Victoria",   color: "pad-pink"   },
+        { id: "alertE",    emoji: "⚠️",  name: "Alerta",    color: "pad-red"    },
+        { id: "march",     emoji: "🥁",   name: "Marcha",     color: "pad-violet" },
+    ],
+    bluey: [
+        { id: "woof",      emoji: "🐕",   name: "¡Guau!",   color: "pad-blue"   },
+        { id: "happyB",    emoji: "😊",   name: "Feliz",     color: "pad-yellow" },
+        { id: "surpriseB", emoji: "😲",   name: "Sorpresa",  color: "pad-cyan"   },
+        { id: "danceB",    emoji: "💃",   name: "Bailar",    color: "pad-pink"   },
+        { id: "cricket",   emoji: "🦗",   name: "Grillo",    color: "pad-green"  },
+        { id: "fluteB",    emoji: "🎵",   name: "Flauta",    color: "pad-violet" },
+        { id: "gameB",     emoji: "🎮",   name: "Juego",     color: "pad-orange" },
+        { id: "friend",    emoji: "🤝",   name: "Amistad",   color: "pad-red"    },
+        { id: "family",    emoji: "❤️",  name: "Familia",  color: "pad-purple" },
+    ],
+    kpop: [
+        { id: "beatDrop",  emoji: "🎵",   name: "Beat Drop", color: "pad-purple" },
+        { id: "cheerK",    emoji: "📣",   name: "Cheer",     color: "pad-pink"   },
+        { id: "cymbalK",   emoji: "🥁",   name: "Cymbal",    color: "pad-violet" },
+        { id: "synthK",    emoji: "🎹",   name: "Synth",     color: "pad-cyan"   },
+        { id: "dropK",     emoji: "⬇️",  name: "Drop",     color: "pad-blue"   },
+        { id: "airHornK",  emoji: "📯",   name: "Air Horn",  color: "pad-yellow" },
+        { id: "woahK",     emoji: "😮",   name: "¡Woah!",   color: "pad-orange" },
+        { id: "crowdK",    emoji: "👥",   name: "Crowd",     color: "pad-red"    },
+        { id: "fanchant",  emoji: "💜",   name: "Fanchant",  color: "pad-green"  },
+    ],
+    spiderman: [
+        { id: "webshoot",  emoji: "🕸️",  name: "Web Shoot", color: "pad-red"    },
+        { id: "swingS",    emoji: "🏙️",  name: "Swing",    color: "pad-blue"   },
+        { id: "thwip",     emoji: "💨",   name: "Thwip",     color: "pad-cyan"   },
+        { id: "villainS",  emoji: "😈",   name: "Villano",   color: "pad-purple" },
+        { id: "alertS",    emoji: "🚨",   name: "Alerta",    color: "pad-orange" },
+        { id: "boomS",     emoji: "💥",   name: "Boom",      color: "pad-pink"   },
+        { id: "powerS",    emoji: "⚡",   name: "Poder",     color: "pad-yellow" },
+        { id: "victoryS",  emoji: "🏆",   name: "Victoria",  color: "pad-green"  },
+        { id: "cityS",     emoji: "🌃",   name: "Ciudad",    color: "pad-violet" },
+    ],
+};
+
+const SOUNDBOARD_THEME_LABELS = {
+    juegos:       "🎉 Genérico",
+    piratas:      "🏴‍☠️ Piratas",
+    exploradores: "🧭 Exploradores",
+    bluey:        "💙 Bluey",
+    kpop:         "🎤 K-Pop",
+    spiderman:    "🕷️ Spiderman",
+};
+
+let currentSoundboardSounds = GENERIC_SOUNDS; // sonidos visibles ahora (para el modo escenario)
+
+function renderSoundboard(sounds, label) {
+    currentSoundboardSounds = sounds;
+    const grid = document.getElementById("soundboard-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+
+    sounds.forEach((sound, idx) => {
+        const pad = document.createElement("button");
+        pad.className = `sound-pad ${sound.color || "pad-pink"}`;
+        pad.setAttribute("data-sound", sound.id);
+        pad.setAttribute("data-key", String(idx + 1));
+        pad.innerHTML = `
+            <span class="pad-key">${idx + 1}</span>
+            <span class="pad-emoji">${sound.emoji}</span>
+            <span class="pad-name">${sound.name}</span>
+        `;
+
+        // Restaurar estado personalizado si existe
+        if (customSfxBlobs[sound.id]) {
+            pad.classList.add("customized");
+            pad.style.borderStyle = "dashed";
+            const nameEl = pad.querySelector(".pad-name");
+            if (!nameEl.textContent.startsWith("*")) nameEl.textContent = `* ${nameEl.textContent}`;
+        }
+
+        pad.addEventListener("click", () => {
+            triggerSFX(sound.id);
+            pad.classList.add("triggered");
+            setTimeout(() => pad.classList.remove("triggered"), 150);
+        });
+
+        grid.appendChild(pad);
+    });
+
+    // Actualizar label del tema en el header del panel
+    const themeLabel = document.getElementById("soundboard-theme-label");
+    if (themeLabel) themeLabel.textContent = label || "🎉 Genérico";
+
+    // Actualizar select del custom SFX binder con los sonidos actuales
+    const sfxSelect = document.getElementById("sfx-select-to-bind");
+    if (sfxSelect) {
+        sfxSelect.innerHTML = "";
+        sounds.forEach((sound, idx) => {
+            const opt = document.createElement("option");
+            opt.value = sound.id;
+            opt.textContent = `Reemplazar ${idx + 1}. ${sound.name} ${sound.emoji}`;
+            sfxSelect.appendChild(opt);
+        });
+    }
+
+    // Si el modo escenario está abierto, refrescar también sus pads
+    const stage = document.getElementById("stage-mode");
+    if (stage && !stage.classList.contains("hidden")) renderStageSoundboard();
+}
+
+// ============================================================
+// MODO ESCENARIO (botones gigantes para usar en directo)
+// ============================================================
+function renderStageSoundboard() {
+    const grid = document.getElementById("stage-sounds");
+    if (!grid) return;
+    grid.innerHTML = "";
+    (currentSoundboardSounds || GENERIC_SOUNDS).forEach((sound) => {
+        const pad = document.createElement("button");
+        pad.className = "stage-pad";
+        pad.innerHTML = `<span class="e">${sound.emoji}</span><span class="n">${sound.name}</span>`;
+        pad.addEventListener("click", () => {
+            triggerSFX(sound.id);
+            pad.classList.add("triggered");
+            setTimeout(() => pad.classList.remove("triggered"), 150);
+        });
+        grid.appendChild(pad);
+    });
+}
+
+function renderStagePlaylists() {
+    const grid = document.getElementById("stage-playlists");
+    if (!grid) return;
+    grid.innerHTML = "";
+    STAGE_PLAYLISTS.forEach(([key, emoji, label]) => {
+        const button = document.createElement("button");
+        const count = PLAYLISTS[key]?.length || 0;
+        button.className = `stage-playlist ${currentPlaylistKey === key ? "active" : ""}`;
+        button.disabled = count === 0;
+        button.innerHTML = `<span>${emoji}</span><strong>${label}</strong><small>${count} ${count === 1 ? "canción" : "canciones"}</small>`;
+        button.addEventListener("click", async () => {
+            switchPlaylistTab(`tab-${key}`);
+            renderStagePlaylists();
+            if (PLAYLISTS[key]?.length) {
+                loadTrack(key, 0);
+                await playCurrentTrack();
+            }
+        });
+        grid.appendChild(button);
+    });
+}
+
+function updateVoiceStatus(message) {
+    const status = document.getElementById("stage-voice-status");
+    if (status) {
+        status.textContent = message || (voiceActive ? "Escuchando: di 'Samadry' y una orden" : "Micrófono apagado");
+        status.classList.toggle("listening", voiceActive);
+    }
+    const stageButton = document.getElementById("stage-voice");
+    if (stageButton) {
+        stageButton.classList.toggle("active-voice", voiceActive);
+        stageButton.textContent = voiceActive ? "🎙️ Escuchando" : "🎙️ Escuchar";
+    }
+}
+
+function syncStageInfo() {
+    const t = document.getElementById("stage-track-title");
+    const s = document.getElementById("stage-track-sub");
+    if (t) t.textContent = document.getElementById("track-title").textContent;
+    if (s) s.textContent = document.getElementById("track-subtitle").textContent;
+}
+
+function openStageMode() {
+    const el = document.getElementById("stage-mode");
+    if (!el) return;
+    renderStageSoundboard();
+    renderStagePlaylists();
+    syncStageInfo();
+    updateVoiceStatus();
+    const pb = document.getElementById("stage-play");
+    if (pb) pb.textContent = nativePlayer.paused ? "▶️" : "⏸️";
+    const db = document.getElementById("stage-duck");
+    if (db) db.classList.toggle("active-duck", isDucked);
+    el.classList.remove("hidden");
+    try { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); } catch (e) {}
+}
+
+function closeStageMode() {
+    const el = document.getElementById("stage-mode");
+    if (el) el.classList.add("hidden");
+    if (document.fullscreenElement) { try { document.exitFullscreen(); } catch (e) {} }
+}
+
 // --- SPEECH RECOGNITION (VOICE ASSISTANT "OYE SAMADRY") ---
 
 function initVoiceAssistant() {
@@ -487,33 +1362,39 @@ function initVoiceAssistant() {
     recognition.continuous = true;
     recognition.lang = 'es-ES';
     recognition.interimResults = false;
-    
+
     recognition.onstart = () => {
         voiceActive = true;
         const voiceBtn = document.getElementById("voice-assistant-btn");
         voiceBtn.className = "icon-btn voice-btn-active";
         voiceBtn.title = "Asistente de Voz Activo (Escuchando...)";
+        updateVoiceStatus();
         showToast("Asistente de Voz Activo: Di 'Oye Samadry' 🎙️");
     };
     
     recognition.onend = () => {
         const voiceBtn = document.getElementById("voice-assistant-btn");
         if (voiceActive) {
-            // Reiniciar automáticamente si se detiene por inactividad
-            try {
-                recognition.start();
-            } catch(e) {}
+            clearTimeout(recognitionRestartTimer);
+            recognitionRestartTimer = setTimeout(() => {
+                if (!voiceActive) return;
+                try { recognition.start(); } catch(e) {}
+            }, 350);
         } else {
             voiceBtn.className = "icon-btn voice-btn-inactive";
             voiceBtn.title = "Activar Asistente de Voz";
         }
+        updateVoiceStatus();
     };
     
     recognition.onresult = (event) => {
-        const resultIndex = event.resultIndex;
-        const transcript = event.results[resultIndex][0].transcript.trim().toLowerCase();
-        console.log("Voz reconocida:", transcript);
-        processVoiceCommand(transcript);
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (!event.results[i].isFinal) continue;
+            const transcript = event.results[i][0].transcript.trim().toLowerCase();
+            console.log("Voz:", transcript, "(final)");
+            updateVoiceStatus(`He oído: “${transcript}”`);
+            processVoiceCommand(transcript);
+        }
     };
     
     recognition.onerror = (e) => {
@@ -521,6 +1402,10 @@ function initVoiceAssistant() {
         if (e.error === 'not-allowed') {
             alert("Acceso al micrófono denegado. Activa los permisos en el navegador.");
             toggleVoiceAssistant(false);
+        } else if (e.error === "no-speech") {
+            updateVoiceStatus("No te he oído. Sigue activo.");
+        } else if (e.error === "audio-capture") {
+            updateVoiceStatus("No se encuentra el micrófono");
         }
     };
 }
@@ -553,18 +1438,81 @@ function toggleVoiceAssistant(forceState) {
         voiceBtn.className = "icon-btn voice-btn-inactive";
         voiceBtn.title = "Activar Asistente de Voz";
         showToast("Asistente de Voz Desactivado 🤐");
+        updateVoiceStatus();
     }
 }
 
+let _lastCommandAt = 0;
+
 function processVoiceCommand(transcript) {
-    // Comando directo sin activador: "preparados listos ya"
-    if (transcript.includes("preparados listos ya") || transcript.includes("preparados listos y ya")) {
+    const now = Date.now();
+    if (now - _lastCommandAt < 2000) return; // Cooldown 2s entre comandos
+
+    // --- Comandos directos (sin activador) ---
+
+    // "siguiente canción" → pasa a la siguiente pista
+    if (transcript.includes("siguiente canción") || transcript.includes("siguiente cancion")) {
+        _lastCommandAt = now;
+        playNext();
+        showToast("Voz: ⏭️ Siguiente canción");
+        return;
+    }
+
+    // "stop" → pausa la canción
+    if (transcript.includes("stop")) {
+        _lastCommandAt = now;
+        pauseCurrentTrack();
+        showToast("Voz: ⏸️ Stop");
+        return;
+    }
+
+    // "seguimos" / "sigue" → reanuda la canción
+    if (transcript.includes("seguimos")) {
+        _lastCommandAt = now;
+        playCurrentTrack();
+        showToast("Voz: ▶️ Seguimos");
+        return;
+    }
+
+    // "preparados listos" → carga y reproduce juegos directamente
+    if (transcript.includes("preparados listos")) {
+        _lastCommandAt = now;
         startGamesMusicNow();
         return;
     }
-    
+
+    // "comienza la lista de juegos generica" → carga y reproduce juegos
+    if (transcript.includes("comienza la lista de juegos") || transcript.includes("lista de juegos generica") || transcript.includes("empieza juegos")) {
+        _lastCommandAt = now;
+        switchPlaylistTab("tab-juegos");
+        loadTrack("juegos", 0);
+        playCurrentTrack();
+        showToast("Voz: Juegos Generica ▶️ 🏃");
+        return;
+    }
+
+    // "momento tarta" → canción de cumpleaños
+    if (transcript.includes("momento tarta") || transcript.includes("canción tarta") || transcript.includes("cancion tarta")) {
+        _lastCommandAt = now;
+        loadTrack("tarta", 0);
+        playCurrentTrack();
+        showToast("Voz: 🎂 ¡Momento Tarta!");
+        return;
+    }
+
+    // "momento mundo" → canción especial Mundo Samadry
+    if (transcript.includes("momento mundo")) {
+        _lastCommandAt = now;
+        loadTrack("mundo_samadry", 0);
+        playCurrentTrack();
+        showToast("Voz: 🌟 ¡Mundo Samadry!");
+        return;
+    }
+
     // Comandos que requieren activador "Samadry"
     if (transcript.includes("samadry")) {
+        _lastCommandAt = now;
+        temporarilyDuckForVoice();
         // Extraer el texto tras el activador
         let cleanText = transcript.replace(/.*samadry/, "").trim();
         
@@ -660,6 +1608,26 @@ function processVoiceCommand(transcript) {
     }
 }
 
+function temporarilyDuckForVoice() {
+    if (isDucked) return;
+    voiceDuckActive = true;
+    clearTimeout(voiceDuckTimer);
+    applyTargetVolume(180);
+    voiceDuckTimer = setTimeout(() => {
+        voiceDuckActive = false;
+        applyTargetVolume(500);
+    }, 2200);
+}
+
+function applyTargetVolume(duration = 300) {
+    const target = getTargetVolume();
+    if (isSpotifyPlaybackActive()) {
+        spotifyPlayer.setVolume(target).catch(() => {});
+    } else if (!nativePlayer.paused) {
+        fadeVolume(nativePlayer, nativePlayer.volume, target, duration);
+    }
+}
+
 function startGamesMusicNow() {
     switchPlaylistTab("tab-juegos");
     loadTrack("juegos", 0);
@@ -724,6 +1692,7 @@ function showToast(msg) {
     toast.style.transition = "opacity 0.3s";
     
     document.body.appendChild(toast);
+    if (msg.startsWith("Voz:")) updateVoiceStatus(msg);
     setTimeout(() => toast.style.opacity = "1", 10);
     
     setTimeout(() => {
@@ -944,6 +1913,32 @@ function normalizeHostedTrack(rawTrack, playlistKey) {
     };
 }
 
+// Carga sfx-manifest.json del hosting → sonidos profesionales para todos los animadores
+// Formato del JSON: { "soundId": "https://.../sfx/nombre.mp3", ... }
+async function loadSFXManifest() {
+    const manifestUrl = `${AUDIO_LIBRARY_BASE_URL}sfx/sfx-manifest.json`;
+    try {
+        const res = await fetch(`${manifestUrl}?v=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) return; // Sin manifest → silencioso, usa sintetizador
+        const data = await res.json();
+        hostedSfxUrls = data;
+        const count = Object.keys(data).length;
+        if (count > 0) {
+            console.log(`SFX manifest cargado: ${count} sonido(s) profesionale(s) disponible(s).`);
+            // Marcar visualmente los pads que tienen sonido real del hosting
+            Object.keys(data).forEach(soundId => {
+                const pad = document.querySelector(`.sound-pad[data-sound="${soundId}"]`);
+                if (pad) {
+                    pad.title = "✅ Sonido profesional del hosting";
+                    pad.classList.add("has-hosted-sfx");
+                }
+            });
+        }
+    } catch (e) {
+        // Normal si el archivo no existe aún
+    }
+}
+
 async function loadHostedPlaylists() {
     try {
         const response = await fetch(`${HOSTED_PLAYLIST_MANIFEST_URL}?v=${Date.now()}`, { cache: "no-store" });
@@ -1080,6 +2075,95 @@ let isLooping = false;
 let activePlaybackSource = "native";
 let currentNativeObjectUrl = null;
 
+// --- TRANSICIONES SUAVES (crossfade, fundidos, ducking) ---
+let isDucked = false; // música bajada para hablar al público
+let crossfadeDuration = parseFloat(localStorage.getItem("samadry_crossfade") ?? "3");
+let crossfadePlayer = null; // elemento secundario para la cola de la pista saliente
+let crossfadeArmed = false; // evita disparar el crossfade dos veces para la misma pista
+let userWantsPlayback = false; // intención real de reproducir (sobrevive a los fundidos)
+
+// Fundido de volumen suave sobre un elemento <audio>
+function fadeVolume(el, from, to, ms, done) {
+    if (!el) return;
+    if (el._fadeTimer) { clearInterval(el._fadeTimer); el._fadeTimer = null; }
+    const clamp = (v) => Math.max(0, Math.min(1, v));
+    const steps = Math.max(1, Math.round(ms / 40));
+    let i = 0;
+    el.volume = clamp(from);
+    el._fadeTimer = setInterval(() => {
+        i++;
+        el.volume = clamp(from + (to - from) * (i / steps));
+        if (i >= steps) {
+            clearInterval(el._fadeTimer);
+            el._fadeTimer = null;
+            if (done) done();
+        }
+    }, 40);
+}
+
+// Volumen objetivo según el slider maestro y si está "bajado para hablar"
+function getTargetVolume() {
+    const base = parseFloat(document.getElementById("master-volume-slider").value);
+    return (isDucked || voiceDuckActive) ? base * 0.15 : base;
+}
+
+// Crossfade: la pista actual se desvanece en un elemento secundario mientras
+// la siguiente entra en el reproductor principal.
+function startCrossfade(remaining) {
+    const list = PLAYLISTS[currentPlaylistKey];
+    if (!list || list.length < 2) return;
+
+    let nextIndex = currentTrackIndex + 1;
+    if (nextIndex >= list.length) nextIndex = 0;
+
+    const fadeMs = Math.min(crossfadeDuration, remaining) * 1000;
+    const startVol = nativePlayer.volume;
+    const curSrc = nativePlayer.currentSrc || nativePlayer.src;
+    const curTime = nativePlayer.currentTime;
+
+    userWantsPlayback = true;
+
+    // 1. Mover la cola de la pista actual a un elemento secundario que se desvanece
+    //    (no aplicable a archivos locales: loadTrack revoca su URL blob:)
+    if (curSrc && !curSrc.startsWith("blob:")) {
+        const outgoing = crossfadePlayer || (crossfadePlayer = new Audio());
+        outgoing.src = curSrc;
+        const seekAndPlay = () => {
+            try { outgoing.currentTime = curTime; } catch (e) {}
+            outgoing.play()
+                .then(() => fadeVolume(outgoing, startVol, 0, fadeMs, () => { try { outgoing.pause(); } catch (e) {} }))
+                .catch(() => {});
+        };
+        if (outgoing.readyState >= 1) seekAndPlay();
+        else outgoing.addEventListener("loadedmetadata", seekAndPlay, { once: true });
+    }
+
+    // 2. La pista siguiente entra en el reproductor principal (loadTrack pone crossfadeArmed=false)
+    loadTrack(currentPlaylistKey, nextIndex);
+    nativePlayer.volume = 0;
+    nativePlayer.play()
+        .then(() => {
+            requestWakeLock();
+            document.getElementById("player-play-btn").textContent = "⏸️";
+            document.getElementById("track-disc").style.animationPlayState = "running";
+            fadeVolume(nativePlayer, 0, getTargetVolume(), fadeMs);
+            updateActiveSongHighlight();
+        })
+        .catch(() => {});
+}
+
+// Bajar/subir la música suavemente para hablar al público
+function toggleDuck() {
+    isDucked = !isDucked;
+    const btn = document.getElementById("player-duck-btn");
+    if (btn) btn.classList.toggle("active-loop", isDucked);
+    const stageBtn = document.getElementById("stage-duck");
+    if (stageBtn) stageBtn.classList.toggle("active-duck", isDucked);
+
+    applyTargetVolume(500);
+    showToast(isDucked ? "🔉 Música bajada para hablar" : "🔊 Música restaurada");
+}
+
 function isSpotifyPlaybackActive() {
     return activePlaybackSource === "spotify" && spotifyConnected && spotifyPlayer;
 }
@@ -1170,11 +2254,13 @@ function loadTrack(playlistKey, index) {
     currentPlaylistKey = playlistKey;
     currentTrackIndex = index;
     activePlaybackSource = "native";
+    crossfadeArmed = false; // nueva pista: rearmar el crossfade
     const track = list[index];
     
     setNativePlayerSource(track);
     nativePlayer.load();
-    
+    prefetchNextTrack();
+
     // UI Updates
     document.getElementById("track-title").textContent = track.title;
     document.getElementById("track-subtitle").textContent = `${track.artist} • ${track.tag}`;
@@ -1185,6 +2271,9 @@ function loadTrack(playlistKey, index) {
     
     // Resaltar canción activa en la lista
     updateActiveSongHighlight();
+
+    // Sincronizar info en el modo escenario
+    syncStageInfo();
 }
 
 async function playCurrentTrack() {
@@ -1200,16 +2289,25 @@ async function playCurrentTrack() {
     if (currentTrackIndex === -1 && PLAYLISTS[currentPlaylistKey].length > 0) {
         loadTrack(currentPlaylistKey, 0);
     }
-    
+
     if (currentTrackIndex !== -1) {
+        userWantsPlayback = true;
         try {
+            // Cancelar cualquier fundido pendiente y arrancar desde 0 para entrar suave
+            if (nativePlayer._fadeTimer) { clearInterval(nativePlayer._fadeTimer); nativePlayer._fadeTimer = null; }
+            const target = getTargetVolume();
+            nativePlayer.volume = 0;
             await nativePlayer.play();
             initAudioContext();
             connectNativePlayerToVisualizerIfSafe();
+            requestWakeLock();
+            fadeVolume(nativePlayer, 0, target, 600);
             playBtn.textContent = "⏸️";
             document.getElementById("track-disc").style.animationPlayState = "running";
             updateActiveSongHighlight();
         } catch (err) {
+            // AbortError ocurre cuando play() es interrumpido por pause() — no es un error real
+            if (err.name === "AbortError") return;
             const message = getNativePlayerErrorMessage(err);
             console.error("Fallo al reproducir:", err, nativePlayer.error);
             document.getElementById("audio-source-status").textContent = `Error: ${message}`;
@@ -1225,8 +2323,11 @@ function pauseCurrentTrack() {
         spotifyPlayer.pause();
         return;
     }
-    
-    nativePlayer.pause();
+
+    userWantsPlayback = false;
+    // Fundido de salida suave antes de pausar
+    fadeVolume(nativePlayer, nativePlayer.volume, 0, 350, () => nativePlayer.pause());
+    releaseWakeLock();
     playBtn.textContent = "▶️";
     document.getElementById("track-disc").style.animationPlayState = "paused";
 }
@@ -1236,10 +2337,11 @@ function togglePlay() {
         spotifyPlayer.togglePlay();
         return;
     }
-    if (nativePlayer.paused) {
-        playCurrentTrack();
-    } else {
+    // Usar la intención real, no nativePlayer.paused (que sigue false durante el fundido)
+    if (userWantsPlayback) {
         pauseCurrentTrack();
+    } else {
+        playCurrentTrack();
     }
 }
 
@@ -1248,8 +2350,13 @@ function stopTrack() {
         spotifyPlayer.pause();
         return;
     }
-    nativePlayer.pause();
-    nativePlayer.currentTime = 0;
+    userWantsPlayback = false;
+    // Fundido de salida suave antes de detener y reiniciar
+    fadeVolume(nativePlayer, nativePlayer.volume, 0, 300, () => {
+        nativePlayer.pause();
+        nativePlayer.currentTime = 0;
+    });
+    releaseWakeLock();
     document.getElementById("player-play-btn").textContent = "▶️";
     document.getElementById("track-disc").style.animationPlayState = "paused";
     document.getElementById("audio-progress-slider").value = 0;
@@ -1301,10 +2408,32 @@ nativePlayer.addEventListener("timeupdate", () => {
         const percent = (nativePlayer.currentTime / nativePlayer.duration) * 100;
         progressSlider.value = percent;
         progressFill.style.width = `${percent}%`;
-        
+        const stageFill = document.getElementById("stage-progress-fill");
+        if (stageFill) stageFill.style.width = `${percent}%`;
+
         currentTimeText.textContent = formatTime(nativePlayer.currentTime);
         document.getElementById("audio-total-time").textContent = formatTime(nativePlayer.duration);
+
+        // Disparar crossfade cuando falta poco para el final
+        if (crossfadeDuration > 0 && !isLooping && !crossfadeArmed && activePlaybackSource === "native") {
+            const remaining = nativePlayer.duration - nativePlayer.currentTime;
+            const list = PLAYLISTS[currentPlaylistKey];
+            if (list && list.length > 1 && remaining > 0.1 && remaining <= crossfadeDuration) {
+                crossfadeArmed = true;
+                startCrossfade(remaining);
+            }
+        }
     }
+});
+
+// Sincronizar el botón gigante de play/pausa del modo escenario con el audio real
+nativePlayer.addEventListener("play", () => {
+    const b = document.getElementById("stage-play");
+    if (b) b.textContent = "⏸️";
+});
+nativePlayer.addEventListener("pause", () => {
+    const b = document.getElementById("stage-play");
+    if (b) b.textContent = "▶️";
 });
 
 // Al terminar la pista, reproducir la siguiente o repetir
@@ -1320,12 +2449,28 @@ nativePlayer.addEventListener("ended", () => {
 // Manejador del volumen nativo y Spotify
 document.getElementById("master-volume-slider").addEventListener("input", (e) => {
     const vol = parseFloat(e.target.value);
-    nativePlayer.volume = vol;
+    const effective = isDucked ? vol * 0.15 : vol;
+    // Cancelar fundido en curso para que el slider mande
+    if (nativePlayer._fadeTimer) { clearInterval(nativePlayer._fadeTimer); nativePlayer._fadeTimer = null; }
+    nativePlayer.volume = effective;
     document.getElementById("master-volume-text").textContent = `${Math.round(vol * 100)}%`;
+    localStorage.setItem("samadry_volume", String(vol));
     if (spotifyConnected && spotifyPlayer) {
-        spotifyPlayer.setVolume(vol);
+        spotifyPlayer.setVolume(effective);
     }
 });
+
+// Restaurar el volumen guardado de sesiones anteriores
+(function restoreSavedVolume() {
+    const saved = localStorage.getItem("samadry_volume");
+    if (saved === null) return;
+    const vol = parseFloat(saved);
+    if (isNaN(vol)) return;
+    const slider = document.getElementById("master-volume-slider");
+    slider.value = vol;
+    nativePlayer.volume = vol;
+    document.getElementById("master-volume-text").textContent = `${Math.round(vol * 100)}%`;
+})();
 
 // Buscar en el reproductor al mover el control deslizante
 document.getElementById("audio-progress-slider").addEventListener("input", (e) => {
@@ -1383,7 +2528,8 @@ function setupShowTimers() {
     totalShowDurationMinutes = parseInt(durationSelect.value);
     
     // Establecer etiqueta de tiempo total
-    document.getElementById("chrono-total-time").textContent = `Total: ${totalShowDurationMinutes}:00`;
+    const chronoTotalEl = document.getElementById("chrono-total-time");
+    if (chronoTotalEl) chronoTotalEl.textContent = `Total: ${totalShowDurationMinutes}:00`;
     
     // Cargar tramos
     const rawSegments = SHOW_STRUCTURES[totalShowDurationMinutes.toString()];
@@ -1399,6 +2545,7 @@ function setupShowTimers() {
 
 function renderSegmentsList() {
     const listEl = document.getElementById("segments-list");
+    if (!listEl) return;
     listEl.innerHTML = "";
     
     segmentsData.forEach((seg, idx) => {
@@ -1468,11 +2615,13 @@ function updateChronometerUI() {
     const secs = showElapsedTime % 60;
     
     const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    document.getElementById("chrono-time").textContent = timeStr;
-    
+    const chronoTimeEl = document.getElementById("chrono-time");
+    if (chronoTimeEl) chronoTimeEl.textContent = timeStr;
+
     const totalSecs = totalShowDurationMinutes * 60;
     const progressPct = (showElapsedTime / totalSecs) * 100;
-    document.getElementById("chrono-progress").style.width = `${Math.min(100, progressPct)}%`;
+    const chronoProgressEl = document.getElementById("chrono-progress");
+    if (chronoProgressEl) chronoProgressEl.style.width = `${Math.min(100, progressPct)}%`;
 }
 
 function startShowTimer() {
@@ -1509,10 +2658,12 @@ function startShowTimer() {
         renderSegmentsList();
     }, 1000);
     
-    document.getElementById("chrono-start-btn").disabled = true;
-    document.getElementById("chrono-pause-btn").disabled = false;
-    document.getElementById("chrono-status").textContent = "En Vivo";
-    document.getElementById("chrono-status").style.color = "var(--neon-green-real)";
+    document.getElementById("chrono-start-btn")?.setAttribute("disabled", true);
+    document.getElementById("chrono-pause-btn")?.removeAttribute("disabled");
+    if (document.getElementById("chrono-status")) {
+        document.getElementById("chrono-status").textContent = "En Vivo";
+        document.getElementById("chrono-status").style.color = "var(--neon-green-real)";
+    }
     
     renderSegmentsList();
 }
@@ -1522,10 +2673,12 @@ function pauseShowTimer() {
         clearInterval(showTimerInterval);
         showTimerInterval = null;
     }
-    document.getElementById("chrono-start-btn").disabled = false;
-    document.getElementById("chrono-pause-btn").disabled = true;
-    document.getElementById("chrono-status").textContent = "Pausado";
-    document.getElementById("chrono-status").style.color = "var(--neon-yellow)";
+    document.getElementById("chrono-start-btn")?.removeAttribute("disabled");
+    document.getElementById("chrono-pause-btn")?.setAttribute("disabled", true);
+    if (document.getElementById("chrono-status")) {
+        document.getElementById("chrono-status").textContent = "Pausado";
+        document.getElementById("chrono-status").style.color = "var(--neon-yellow)";
+    }
     
     renderSegmentsList();
 }
@@ -1549,21 +2702,38 @@ function switchPlaylistTab(tabId) {
     });
     
     const activeTab = document.getElementById(tabId);
+    if (!activeTab) return;
     activeTab.classList.add("active");
     activeTab.setAttribute("aria-selected", "true");
     
     const key = tabId.replace("tab-", "");
     currentPlaylistKey = key;
-    
-    // Ocultar / Mostrar zona de subida local
+
+    // Salir de la vista de búsqueda/favoritos al elegir una pestaña
+    viewMode = "tabs";
+    searchQuery = "";
+    const searchInput = document.getElementById("song-search");
+    if (searchInput) searchInput.value = "";
+    const favBtn = document.getElementById("fav-toggle-btn");
+    if (favBtn) favBtn.classList.remove("active");
+
+    // Ocultar / Mostrar zona de subida local (elemento opcional, puede no existir)
     const uploader = document.getElementById("local-uploader-area");
-    if (key === "locales") {
-        uploader.classList.remove("hidden");
-    } else {
-        uploader.classList.add("hidden");
+    if (uploader) {
+        if (key === "locales") {
+            uploader.classList.remove("hidden");
+        } else {
+            uploader.classList.add("hidden");
+        }
     }
     
     renderSongsList();
+
+    // Auto-cambiar soundboard según la temática de la playlist
+    const thematicSounds = THEMATIC_SOUNDS[key];
+    const themeLabel = SOUNDBOARD_THEME_LABELS[key] || "🎉 Genérico";
+    renderSoundboard(thematicSounds || GENERIC_SOUNDS, themeLabel);
+    renderStagePlaylists();
 }
 
 function getPlaylistLabel(key) {
@@ -1580,12 +2750,127 @@ function getPlaylistLabel(key) {
     return labels[key] || key;
 }
 
+// ============================================================
+// BUSCADOR Y FAVORITOS
+// ============================================================
+let viewMode = "tabs"; // "tabs" | "search" | "favorites"
+let searchQuery = "";
+let favorites = new Set(JSON.parse(localStorage.getItem("samadry_favorites") || "[]"));
+
+function songKey(song) {
+    return song.url || `${song.title}|${song.artist}`;
+}
+function isFavorite(song) {
+    return favorites.has(songKey(song));
+}
+function toggleFavorite(song) {
+    const k = songKey(song);
+    if (favorites.has(k)) favorites.delete(k);
+    else favorites.add(k);
+    localStorage.setItem("samadry_favorites", JSON.stringify([...favorites]));
+}
+
+// Constructor de fila de canción reutilizado por las 3 vistas
+function buildSongItem(song, key, index, showPlaylistLabel) {
+    song.playlistSource = key;
+    const isActive = currentTrackIndex === index && currentPlaylistKey === key;
+    const playing = isActive && !nativePlayer.paused;
+    const tagText = showPlaylistLabel ? getPlaylistLabel(key) : (song.tag || song.artist);
+
+    const item = document.createElement("div");
+    item.className = `song-item ${isActive ? 'active' : ''}`;
+    item.innerHTML = `
+        <span class="song-number">${String(index + 1).padStart(2, '0')}</span>
+        <span class="song-play-icon">${playing ? '🔊' : '▶️'}</span>
+        <div class="song-details">
+            <div class="song-title">${song.title}</div>
+            <span class="song-tag">${tagText}</span>
+        </div>
+        <span class="song-duration">${song.duration || ''}</span>
+        <button class="song-fav ${isFavorite(song) ? 'is-fav' : ''}" title="Marcar favorita">${isFavorite(song) ? '⭐' : '☆'}</button>
+    `;
+
+    item.querySelector(".song-fav").addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleFavorite(song);
+        refreshCurrentView();
+    });
+
+    item.addEventListener("click", () => {
+        if (currentTrackIndex === index && currentPlaylistKey === key) {
+            togglePlay();
+        } else {
+            exitSearchView();
+            loadTrack(key, index);
+            const tabBtn = document.getElementById(`tab-${key}`);
+            if (tabBtn) switchPlaylistTab(`tab-${key}`);
+            else renderSongsList();
+            playCurrentTrack();
+        }
+    });
+
+    return item;
+}
+
+function searchAllSongs(q) {
+    const query = q.trim().toLowerCase();
+    const res = [];
+    Object.keys(PLAYLISTS).forEach((key) => {
+        if (key === "locales") return;
+        PLAYLISTS[key].forEach((song, index) => {
+            const hay = `${song.title} ${song.artist} ${song.tag || ""}`.toLowerCase();
+            if (hay.includes(query)) res.push({ song, key, index });
+        });
+    });
+    return res;
+}
+
+function getAllFavoriteSongs() {
+    const res = [];
+    Object.keys(PLAYLISTS).forEach((key) => {
+        if (key === "locales") return;
+        PLAYLISTS[key].forEach((song, index) => {
+            if (isFavorite(song)) res.push({ song, key, index });
+        });
+    });
+    return res;
+}
+
+function renderResultsList(items, emptyMsg) {
+    const listEl = document.getElementById("playlist-content");
+    listEl.innerHTML = "";
+    if (items.length === 0) {
+        listEl.innerHTML = `<div class="empty-state"><p style="text-align:center;color:var(--text-secondary);padding:30px 10px;font-size:.85rem;">${emptyMsg}</p></div>`;
+        return;
+    }
+    items.forEach(({ song, key, index }) => listEl.appendChild(buildSongItem(song, key, index, true)));
+}
+
+function refreshCurrentView() {
+    if (viewMode === "search") {
+        renderResultsList(searchAllSongs(searchQuery), `Sin resultados para «${searchQuery}»`);
+    } else if (viewMode === "favorites") {
+        renderResultsList(getAllFavoriteSongs(), "Aún no tienes favoritas.<br>Pulsa la ☆ junto a una canción para guardarla.");
+    } else {
+        renderSongsList();
+    }
+}
+
+function exitSearchView() {
+    viewMode = "tabs";
+    searchQuery = "";
+    const si = document.getElementById("song-search");
+    if (si) si.value = "";
+    const fb = document.getElementById("fav-toggle-btn");
+    if (fb) fb.classList.remove("active");
+}
+
 function renderSongsList() {
     const listEl = document.getElementById("playlist-content");
     listEl.innerHTML = "";
-    
+
     const songs = PLAYLISTS[currentPlaylistKey];
-    
+
     if (!songs || songs.length === 0) {
         if (currentPlaylistKey === "locales") {
             listEl.innerHTML = `
@@ -1607,37 +2892,15 @@ function renderSongsList() {
         }
         return;
     }
-    
-    songs.forEach((song, idx) => {
-        const item = document.createElement("div");
 
-        // Asignar campo de origen a la estructura de la canción si no existe
-        song.playlistSource = currentPlaylistKey;
-        item.className = `song-item ${currentTrackIndex === idx && currentPlaylistKey === song.playlistSource ? 'active' : ''}`;
-        
-        item.innerHTML = `
-            <span class="song-play-icon">${currentTrackIndex === idx && currentPlaylistKey === song.playlistSource && !nativePlayer.paused ? '🔊' : '▶️'}</span>
-            <div class="song-details">
-                <div class="song-title">${song.title}</div>
-                <span class="song-tag">${song.tag || song.artist}</span>
-            </div>
-            <span class="song-duration">${song.duration}</span>
-        `;
-        
-        item.addEventListener("click", () => {
-            if (currentTrackIndex === idx && currentPlaylistKey === song.playlistSource) {
-                togglePlay();
-            } else {
-                loadTrack(currentPlaylistKey, idx);
-                playCurrentTrack();
-            }
-        });
-        
-        listEl.appendChild(item);
+    songs.forEach((song, idx) => {
+        listEl.appendChild(buildSongItem(song, currentPlaylistKey, idx, false));
     });
 }
 
 function updateActiveSongHighlight() {
+    // El resaltado por índice solo es fiable en la vista de pestañas
+    if (viewMode !== "tabs") return;
     // Buscar todos los elementos de canción y actualizar
     const items = document.querySelectorAll(".song-item");
     items.forEach((item, idx) => {
@@ -1656,33 +2919,35 @@ function updateActiveSongHighlight() {
 }
 
 
-// --- LOCAL AUDIO FILE UPLOADER ---
+// --- LOCAL AUDIO FILE UPLOADER (opcional, solo si existe el elemento en el HTML) ---
 const dropZone = document.getElementById("drop-zone");
 const localFileInput = document.getElementById("local-file-input");
 
-dropZone.addEventListener("click", () => localFileInput.click());
+if (dropZone && localFileInput) {
+    dropZone.addEventListener("click", () => localFileInput.click());
 
-localFileInput.addEventListener("change", (e) => {
-    handleLocalFiles(e.target.files);
-});
+    localFileInput.addEventListener("change", (e) => {
+        handleLocalFiles(e.target.files);
+    });
 
-// Drag & Drop
-dropZone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dropZone.classList.add("dragover");
-});
+    // Drag & Drop
+    dropZone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropZone.classList.add("dragover");
+    });
 
-dropZone.addEventListener("dragleave", () => {
-    dropZone.classList.remove("dragover");
-});
+    dropZone.addEventListener("dragleave", () => {
+        dropZone.classList.remove("dragover");
+    });
 
-dropZone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dropZone.classList.remove("dragover");
-    if (e.dataTransfer.files.length > 0) {
-        handleLocalFiles(e.dataTransfer.files);
-    }
-});
+    dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        if (e.dataTransfer.files.length > 0) {
+            handleLocalFiles(e.dataTransfer.files);
+        }
+    });
+}
 
 function handleLocalFiles(files) {
     const skippedFiles = [];
@@ -1972,15 +3237,46 @@ document.getElementById("show-duration-select").addEventListener("change", () =>
 });
 
 // Botones del Cronómetro General
-document.getElementById("chrono-start-btn").addEventListener("click", startShowTimer);
-document.getElementById("chrono-pause-btn").addEventListener("click", pauseShowTimer);
-document.getElementById("chrono-reset-btn").addEventListener("click", resetShowTimer);
+document.getElementById("chrono-start-btn")?.addEventListener("click", startShowTimer);
+document.getElementById("chrono-pause-btn")?.addEventListener("click", pauseShowTimer);
+document.getElementById("chrono-reset-btn")?.addEventListener("click", resetShowTimer);
 
 // Botones del Reproductor Principal
 document.getElementById("player-play-btn").addEventListener("click", togglePlay);
 document.getElementById("player-prev-btn").addEventListener("click", playPrev);
 document.getElementById("player-next-btn").addEventListener("click", playNext);
 document.getElementById("player-stop-btn").addEventListener("click", stopTrack);
+
+// Botón "bajar para hablar" (ducking)
+document.getElementById("player-duck-btn")?.addEventListener("click", toggleDuck);
+
+// Modo Escenario
+document.getElementById("stage-mode-btn")?.addEventListener("click", openStageMode);
+document.getElementById("stage-exit-btn")?.addEventListener("click", closeStageMode);
+document.getElementById("stage-prev")?.addEventListener("click", playPrev);
+document.getElementById("stage-next")?.addEventListener("click", playNext);
+document.getElementById("stage-play")?.addEventListener("click", togglePlay);
+document.getElementById("stage-duck")?.addEventListener("click", toggleDuck);
+document.getElementById("stage-voice")?.addEventListener("click", () => toggleVoiceAssistant());
+document.getElementById("stage-tarta")?.addEventListener("click", async () => {
+    loadTrack("tarta", 0);
+    await playCurrentTrack();
+});
+document.getElementById("stage-mundo")?.addEventListener("click", async () => {
+    loadTrack("mundo_samadry", 0);
+    await playCurrentTrack();
+});
+
+// Selector de crossfade
+const crossfadeSelect = document.getElementById("crossfade-select");
+if (crossfadeSelect) {
+    crossfadeSelect.value = String(crossfadeDuration);
+    crossfadeSelect.addEventListener("change", (e) => {
+        crossfadeDuration = parseFloat(e.target.value);
+        localStorage.setItem("samadry_crossfade", String(crossfadeDuration));
+        showToast(crossfadeDuration > 0 ? `Crossfade: ${crossfadeDuration}s` : "Crossfade desactivado");
+    });
+}
 
 // Botón de Loop
 const loopBtn = document.getElementById("player-loop-btn");
@@ -2005,8 +3301,49 @@ document.getElementById("fullscreen-btn").addEventListener("click", () => {
 });
 
 // Pestañas de Playlist
-["juegos", "piratas", "exploradores", "bluey", "kpop", "spiderman", "locales"].forEach((key) => {
+["juegos", "piratas", "exploradores", "bluey", "kpop", "spiderman"].forEach((key) => {
     document.getElementById(`tab-${key}`).addEventListener("click", () => switchPlaylistTab(`tab-${key}`));
+});
+
+// Buscador de canciones (en todas las listas)
+document.getElementById("song-search")?.addEventListener("input", (e) => {
+    searchQuery = e.target.value;
+    const favBtn = document.getElementById("fav-toggle-btn");
+    if (favBtn) favBtn.classList.remove("active");
+    if (searchQuery.trim()) {
+        viewMode = "search";
+        renderResultsList(searchAllSongs(searchQuery), `Sin resultados para «${searchQuery}»`);
+    } else {
+        viewMode = "tabs";
+        renderSongsList();
+    }
+});
+
+// Botón de favoritas (mostrar/ocultar la vista de favoritas)
+document.getElementById("fav-toggle-btn")?.addEventListener("click", () => {
+    const favBtn = document.getElementById("fav-toggle-btn");
+    if (viewMode === "favorites") {
+        viewMode = "tabs";
+        favBtn.classList.remove("active");
+        renderSongsList();
+    } else {
+        viewMode = "favorites";
+        favBtn.classList.add("active");
+        const si = document.getElementById("song-search");
+        if (si) si.value = "";
+        searchQuery = "";
+        renderResultsList(getAllFavoriteSongs(), "Aún no tienes favoritas.<br>Pulsa la ☆ junto a una canción para guardarla.");
+    }
+});
+
+// Botones de acceso rápido
+document.getElementById("btn-tarta")?.addEventListener("click", async () => {
+    loadTrack("tarta", 0);
+    await playCurrentTrack();
+});
+document.getElementById("btn-mundo-samadry")?.addEventListener("click", async () => {
+    loadTrack("mundo_samadry", 0);
+    await playCurrentTrack();
 });
 
 // Asignar triggers a los botones de la Soundboard
@@ -2097,11 +3434,20 @@ spotifyConnectBtn.addEventListener("click", async () => {
 
 // --- ATADOS DE TECLADO (HOTKEYS) ---
 window.addEventListener("keydown", (e) => {
+    // Escape: salir del Modo Escenario (funciona aunque haya un campo enfocado)
+    if (e.key === "Escape") {
+        const sm = document.getElementById("stage-mode");
+        if (sm && !sm.classList.contains("hidden")) {
+            closeStageMode();
+            return;
+        }
+    }
+
     // Si el usuario está escribiendo en el cuadro de notas, no capturar atajos
     if (document.activeElement === liveNotes || document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "SELECT") {
         return;
     }
-    
+
     // Barra espaciadora: Play/Pause reproductor
     if (e.code === "Space") {
         e.preventDefault();
@@ -2120,6 +3466,206 @@ window.addEventListener("keydown", (e) => {
 
 
 // --- INITIALIZATION ---
+// ============================================================
+// PWA: SERVICE WORKER, OFFLINE, WAKE LOCK, INSTALACIÓN
+// ============================================================
+
+// --- Registro del Service Worker ---
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js")
+            .then((reg) => console.log("Service Worker registrado:", reg.scope))
+            .catch((err) => console.warn("No se pudo registrar el Service Worker:", err));
+    });
+
+    // Escuchar progreso de la pre-descarga de audio
+    navigator.serviceWorker.addEventListener("message", (event) => {
+        const data = event.data || {};
+        const btn = document.getElementById("download-offline-btn");
+        if (data.type === "PRECACHE_PROGRESS" && btn) {
+            btn.textContent = `${data.done}/${data.total}`;
+        }
+        if (data.type === "PRECACHE_DONE") {
+            if (btn) {
+                btn.textContent = "✅";
+                setTimeout(() => { btn.textContent = "⬇️"; }, 3000);
+            }
+            const failed = data.failed || 0;
+            showToast(failed
+                ? `Descarga terminada: ${data.total - failed} guardadas y ${failed} con error`
+                : `✅ ${data.total} pista(s) disponibles sin conexión`);
+            updateOfflineStatus();
+        }
+    });
+}
+
+// --- Wake Lock: mantener la pantalla encendida durante el show ---
+let wakeLock = null;
+
+async function requestWakeLock() {
+    try {
+        if ("wakeLock" in navigator) {
+            wakeLock = await navigator.wakeLock.request("screen");
+        }
+    } catch (err) {
+        // Algunos navegadores la bloquean si la pestaña no está activa; no es crítico
+        console.warn("Wake Lock no disponible:", err.message);
+    }
+}
+
+function releaseWakeLock() {
+    if (wakeLock) {
+        wakeLock.release().catch(() => {});
+        wakeLock = null;
+    }
+}
+
+// Re-adquirir el bloqueo al volver a la app si seguía reproduciéndose
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !nativePlayer.paused) {
+        requestWakeLock();
+    }
+});
+
+// --- Precarga de la siguiente pista (transición sin huecos) ---
+function prefetchNextTrack() {
+    const playlist = PLAYLISTS[currentPlaylistKey];
+    if (!playlist || playlist.length < 2) return;
+
+    let nextIndex = currentTrackIndex + 1;
+    if (nextIndex >= playlist.length) nextIndex = 0;
+
+    const track = playlist[nextIndex];
+    if (track && track.url && !track.fileObject) {
+        // Disparar fetch: el Service Worker lo guardará en caché de audio
+        fetch(track.url).catch(() => {});
+    }
+}
+
+// --- Descargar todas las canciones para uso sin conexión ---
+function collectAllAudioUrls() {
+    const urls = new Set();
+    Object.keys(PLAYLISTS).forEach((key) => {
+        PLAYLISTS[key].forEach((t) => {
+            if (t.url && !t.fileObject) urls.add(t.url);
+        });
+    });
+    Object.values(hostedSfxUrls || {}).forEach((u) => urls.add(u));
+    return [...urls];
+}
+
+function collectPlaylistAudioUrls(key) {
+    return (PLAYLISTS[key] || [])
+        .filter((track) => track.url && !track.fileObject)
+        .map((track) => track.url);
+}
+
+async function updateOfflineStatus() {
+    const badge = document.getElementById("network-status");
+    if (!badge) return;
+    badge.textContent = navigator.onLine ? "Online" : "Sin conexión";
+    badge.classList.toggle("offline", !navigator.onLine);
+}
+
+function requestOfflineDownload(urls, label) {
+    if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
+        showToast("Recarga la página una vez para activar el modo offline.");
+        return;
+    }
+    if (urls.length === 0) {
+        showToast("Esta lista todavía no tiene canciones.");
+        return;
+    }
+    showToast(`Descargando ${label}: ${urls.length} pista(s)...`);
+    navigator.serviceWorker.controller.postMessage({ type: "PRECACHE_AUDIO", urls });
+}
+
+function downloadForOffline() {
+    const urls = collectAllAudioUrls();
+    requestOfflineDownload(urls, "toda la música");
+}
+
+function downloadCurrentPlaylistForOffline() {
+    requestOfflineDownload(collectPlaylistAudioUrls(currentPlaylistKey), getPlaylistLabel(currentPlaylistKey));
+}
+
+document.getElementById("download-offline-btn")?.addEventListener("click", downloadForOffline);
+document.getElementById("stage-download")?.addEventListener("click", downloadCurrentPlaylistForOffline);
+window.addEventListener("online", updateOfflineStatus);
+window.addEventListener("offline", updateOfflineStatus);
+updateOfflineStatus();
+
+// --- Prompt de instalación de la PWA ---
+let deferredInstallPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const installBtn = document.getElementById("install-app-btn");
+    if (installBtn) installBtn.style.display = "";
+});
+
+document.getElementById("install-app-btn")?.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === "accepted") {
+        showToast("📲 ¡App instalada!");
+        document.getElementById("install-app-btn").style.display = "none";
+    }
+    deferredInstallPrompt = null;
+});
+
+window.addEventListener("appinstalled", () => {
+    const installBtn = document.getElementById("install-app-btn");
+    if (installBtn) installBtn.style.display = "none";
+});
+
+
+// Inyectar estilos dinámicos (evita depender de la subida de index.css al hosting)
+document.head.insertAdjacentHTML('beforeend', `<style>
+.song-number{font-size:.7rem;font-weight:700;color:var(--text-secondary);min-width:22px;margin-right:6px;font-variant-numeric:tabular-nums;opacity:.6}
+.song-item.active .song-number{color:var(--neon-cyan);opacity:1}
+.soundboard-theme-badge{display:inline-block;font-size:.62rem;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(157,78,221,.18);border:1px solid rgba(157,78,221,.4);color:#c77dff;letter-spacing:.03em;vertical-align:middle;margin-left:6px;transition:background .3s,color .3s}
+/* Buscador y favoritos */
+.song-search-bar{display:flex;gap:8px;margin-bottom:10px}
+#song-search{flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;color:#fff;padding:9px 12px;font-size:.9rem;outline:none}
+#song-search::placeholder{color:#9aa6c0}
+#song-search:focus{border-color:#9d4edd}
+#fav-toggle-btn{flex:none;width:46px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#f7b500;font-size:1.15rem;cursor:pointer;transition:background .2s,border-color .2s}
+#fav-toggle-btn.active{background:rgba(247,181,0,.2);border-color:rgba(247,181,0,.5)}
+.song-fav{flex:none;background:none;border:none;cursor:pointer;font-size:1.1rem;color:#f7b500;padding:4px 6px;line-height:1;opacity:.9}
+.song-fav.is-fav{filter:drop-shadow(0 0 4px rgba(247,181,0,.55))}
+</style>`);
+
+// Estilos del Modo Escenario (botones gigantes para usar en directo)
+document.head.insertAdjacentHTML('beforeend', `<style>
+#stage-mode{position:fixed;inset:0;z-index:100000;background:radial-gradient(circle at 50% 0%,#16121f,#09090e 70%);display:flex;flex-direction:column;padding:14px;gap:12px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#stage-mode.hidden{display:none}
+.stage-top{display:flex;align-items:center;gap:12px;padding-top:8px}
+.stage-track{flex:1;min-width:0}
+.stage-track-title{font-size:1.6rem;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.1}
+.stage-track-sub{font-size:.9rem;color:#9aa6c0;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.stage-exit{flex:none;width:56px;height:56px;border-radius:16px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:1.5rem;cursor:pointer}
+.stage-exit:active{transform:scale(.93)}
+.stage-progress{height:10px;border-radius:8px;background:rgba(255,255,255,.1);overflow:hidden}
+.stage-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#7b2ff7,#23d5e8);transition:width .2s linear}
+.stage-transport{display:flex;gap:12px}
+.stage-btn{flex:1;min-height:88px;border-radius:20px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;font-size:2rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .08s,background .2s}
+.stage-btn:active{transform:scale(.95)}
+.stage-btn.play{flex:1.7;font-size:2.8rem;background:linear-gradient(135deg,#7b2ff7,#23d5e8);border:none}
+.stage-btn.duck.active-duck{background:linear-gradient(135deg,#f7b500,#ff7a00);color:#1a1200}
+.stage-quick{display:flex;gap:12px}
+.stage-quick .stage-btn{min-height:66px;font-size:1.15rem;font-weight:700}
+.stage-section-label{font-size:.72rem;color:#9aa6c0;text-transform:uppercase;letter-spacing:.09em;margin:2px 0 -2px;opacity:.75}
+.stage-sounds{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding-bottom:8px}
+.stage-pad{min-height:90px;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;transition:transform .08s,background .15s}
+.stage-pad:active,.stage-pad.triggered{transform:scale(.92);background:rgba(123,47,247,.4)}
+.stage-pad .e{font-size:2rem;line-height:1}
+.stage-pad .n{font-size:.78rem;font-weight:700;text-align:center;padding:0 4px}
+@media(min-width:700px){.stage-track-title{font-size:2.1rem}.stage-sounds{grid-template-columns:repeat(4,1fr)}}
+</style>`);
+
 window.addEventListener("DOMContentLoaded", async () => {
     // 1. Extraer tokens de Spotify si redirige del login OAuth antiguo
     const hash = window.location.hash.substring(1);
@@ -2161,9 +3707,15 @@ window.addEventListener("DOMContentLoaded", async () => {
         initSpotifyPlayerIfReady();
     }
 
+    // Renderizar soundboard genérico primero (para que loadCustomSFXFromDB encuentre los pads)
+    renderSoundboard(GENERIC_SOUNDS, "🎉 Genérico");
+
     // Cargar sonidos personalizados de IndexedDB
     loadCustomSFXFromDB();
     
+    // Cargar sonidos profesionales del hosting (sfx-manifest.json)
+    await loadSFXManifest();
+
     // Cargar listas del hosting si existe playlists.json
     await loadHostedPlaylists();
     
